@@ -193,6 +193,28 @@ pub async fn upgrade_openclaw(app: tauri::AppHandle, source: String) -> Result<S
         return Err("升级失败，请查看日志".into());
     }
 
+    // 切换源后重装 Gateway 服务，更新 plist 中的路径
+    if current_source != source {
+        let _ = app.emit("upgrade-log", "正在重装 Gateway 服务（更新启动路径）...");
+        // 先停掉旧的
+        let uid = get_uid().unwrap_or(501);
+        let _ = Command::new("launchctl")
+            .args(["bootout", &format!("gui/{uid}/ai.openclaw.gateway")])
+            .output();
+        // 重新安装（生成新 plist）
+        let gw_out = Command::new("openclaw")
+            .args(["gateway", "install"])
+            .output();
+        match gw_out {
+            Ok(o) if o.status.success() => {
+                let _ = app.emit("upgrade-log", "Gateway 服务已重装");
+            }
+            _ => {
+                let _ = app.emit("upgrade-log", "⚠️ Gateway 重装失败，请手动执行 openclaw gateway install");
+            }
+        }
+    }
+
     let new_ver = get_local_version().unwrap_or_else(|| "未知".into());
     let msg = format!("✅ 升级成功，当前版本: {new_ver}");
     let _ = app.emit("upgrade-log", &msg);
