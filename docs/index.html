@@ -10,7 +10,7 @@
   <meta property="og:description" content="基于 Tauri v2 的跨平台桌面应用，为 OpenClaw AI Agent 框架提供可视化管理界面。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://qingchencloud.github.io/clawpanel/">
-  <link rel="icon" href="https://raw.githubusercontent.com/qingchencloud/clawpanel/main/public/images/logo.svg" type="image/svg+xml">
+  <link rel="icon" href="./logo.png" type="image/png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -117,10 +117,9 @@
       position: absolute;
       inset: 0;
       border-radius: inherit;
+      background-color: inherit;
       z-index: -1;
     }
-    .dark .glow-border::after { background: #0a0a0f; }
-    html:not(.dark) .glow-border::after { background: #ffffff; }
     @keyframes glowSpin {
       to { --glow-angle: 360deg; }
     }
@@ -249,7 +248,7 @@
   <nav class="fixed top-0 inset-x-0 z-50 bg-white/80 dark:bg-[#0a0a0f]/80 backdrop-blur-2xl border-b border-gray-200 dark:border-white/[0.06]">
     <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
       <a href="#" class="flex items-center gap-2.5 font-bold text-lg tracking-tight no-underline text-gray-900 dark:text-white">
-        <img src="https://raw.githubusercontent.com/qingchencloud/clawpanel/main/public/images/logo.svg" alt="Logo" class="w-8 h-8 rounded-lg">
+        <img src="./logo.png" alt="Logo" class="w-8 h-8 rounded-lg">
         ClawPanel
       </a>
       <!-- 桌面导航 -->
@@ -619,7 +618,7 @@
   <footer class="border-t border-gray-200 dark:border-white/[0.06] py-10">
     <div class="max-w-5xl mx-auto px-5 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-400 dark:text-gray-500">
       <div class="flex items-center gap-2">
-        <img src="https://raw.githubusercontent.com/qingchencloud/clawpanel/main/public/images/logo.svg" alt="Logo" class="w-5 h-5 rounded opacity-50">
+        <img src="./logo.png" alt="Logo" class="w-5 h-5 rounded opacity-50">
         <span>MIT License &copy; 2026 <a href="https://github.com/qingchencloud" class="hover:text-gray-600 dark:hover:text-gray-300 transition no-underline text-gray-400 dark:text-gray-500">qingchencloud</a></span>
       </div>
       <div class="flex gap-6">
