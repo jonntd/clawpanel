@@ -70,10 +70,20 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
+      # Rust 格式检查
+      - name: Rust 格式检查
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
       # Rust 编译检查
       - name: Rust 编译检查
         working-directory: src-tauri
         run: cargo check
+
+      # Rust Lint（警告视为错误）
+      - name: Rust Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       # 前端构建验证
       - name: 前端构建验证

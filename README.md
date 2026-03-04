@@ -23,7 +23,7 @@
 
 ---
 
-ClawPanel 是 [OpenClaw](https://github.com/openclaw-labs/openclaw) AI Agent 框架的可视化管理面板，提供服务管控、模型配置、日志查看、记忆管理等核心功能，一站式管理你的 OpenClaw 实例。
+ClawPanel 是 [OpenClaw](https://github.com/openclaw/openclaw) AI Agent 框架的可视化管理面板，提供服务管控、模型配置、日志查看、记忆管理等核心功能，一站式管理你的 OpenClaw 实例。
 
 ## 下载安装
 
@@ -176,7 +176,7 @@ npm run tauri build -- --bundles nsis
 
 | 项目 | 说明 |
 |------|------|
-| [OpenClaw](https://github.com/openclaw-labs/openclaw) | AI Agent 框架 |
+| [OpenClaw](https://github.com/openclaw/openclaw) | AI Agent 框架 |
 | [ClawApp](https://github.com/qingchencloud/clawapp) | 跨平台移动聊天客户端 |
 | [cftunnel](https://github.com/qingchencloud/cftunnel) | Cloudflare Tunnel 内网穿透工具 |
 
