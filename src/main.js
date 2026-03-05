@@ -17,6 +17,7 @@ import './style/pages.css'
 import './style/chat.css'
 import './style/agents.css'
 import './style/debug.css'
+import './style/assistant.css'
 
 // 初始化主题
 initTheme()
@@ -37,10 +38,18 @@ async function boot() {
   registerRoute('/memory', () => import('./pages/memory.js'))
   registerRoute('/extensions', () => import('./pages/extensions.js'))
   registerRoute('/about', () => import('./pages/about.js'))
+  registerRoute('/assistant', () => import('./pages/assistant.js'))
   registerRoute('/setup', () => import('./pages/setup.js'))
 
   renderSidebar(sidebar)
   initRouter(content)
+
+  // 隐藏启动加载屏
+  const splash = document.getElementById('splash')
+  if (splash) {
+    splash.classList.add('hide')
+    setTimeout(() => splash.remove(), 500)
+  }
 
   // 后台检测状态，检测完再决定是否跳转 setup
   detectOpenclawStatus().then(() => {

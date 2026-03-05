@@ -730,6 +730,50 @@ const handlers = {
       },
     }
   },
+  // 数据目录 & 图片存储
+  assistant_ensure_data_dir() {
+    const dataDir = path.join(OPENCLAW_DIR, 'clawpanel')
+    for (const sub of ['images', 'sessions', 'cache']) {
+      const dir = path.join(dataDir, sub)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    }
+    return dataDir
+  },
+
+  assistant_save_image({ id, data }) {
+    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const pureB64 = data.includes(',') ? data.split(',')[1] : data
+    const ext = data.startsWith('data:image/png') ? 'png'
+      : data.startsWith('data:image/gif') ? 'gif'
+      : data.startsWith('data:image/webp') ? 'webp' : 'jpg'
+    const filepath = path.join(dir, `${id}.${ext}`)
+    fs.writeFileSync(filepath, Buffer.from(pureB64, 'base64'))
+    return filepath
+  },
+
+  assistant_load_image({ id }) {
+    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    for (const ext of ['jpg', 'png', 'gif', 'webp', 'jpeg']) {
+      const filepath = path.join(dir, `${id}.${ext}`)
+      if (fs.existsSync(filepath)) {
+        const bytes = fs.readFileSync(filepath)
+        const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
+        return `data:${mime};base64,${bytes.toString('base64')}`
+      }
+    }
+    throw new Error(`图片 ${id} 不存在`)
+  },
+
+  assistant_delete_image({ id }) {
+    const dir = path.join(OPENCLAW_DIR, 'clawpanel', 'images')
+    for (const ext of ['jpg', 'png', 'gif', 'webp', 'jpeg']) {
+      const filepath = path.join(dir, `${id}.${ext}`)
+      if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
+    }
+    return null
+  },
+
   check_panel_update() { return { latest: null, url: 'https://github.com/qingchencloud/clawpanel/releases' } },
   write_env_file({ path: p, config }) {
     const expanded = p.startsWith('~/') ? path.join(homedir(), p.slice(2)) : p

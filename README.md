@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  OpenClaw 可视化管理面板 — 基于 Tauri v2 的跨平台桌面应用
+  内置 AI 助手的 OpenClaw 管理面板 — 一键安装、配置、诊断、修复
 </p>
 
 <p align="center">
@@ -24,16 +24,16 @@
 ---
 
 <p align="center">
-  <img src="docs/terminal-demo.gif" width="800" alt="ClawPanel 安装演示">
+  <img src="docs/ai-assistant-demo.gif" width="800" alt="ClawPanel AI 助手演示">
 </p>
 
 <p align="center">
   <a href="https://claw.qt.cool/#video">
-    <img src="https://img.shields.io/badge/%E2%96%B6%20%E6%BC%94%E7%A4%BA%E8%A7%86%E9%A2%91-38%E7%A7%92%E5%BF%AB%E9%80%9F%E4%BA%86%E8%A7%A3-6366f1?style=for-the-badge" alt="演示视频">
+    <img src="https://img.shields.io/badge/%E2%96%B6%20%E6%BC%94%E7%A4%BA%E8%A7%86%E9%A2%91-50%E7%A7%92%E5%BF%AB%E9%80%9F%E4%BA%86%E8%A7%A3-6366f1?style=for-the-badge" alt="演示视频">
   </a>
 </p>
 
-ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent 框架的可视化管理面板，提供服务管控、模型配置、日志查看、记忆管理等核心功能，一站式管理你的 OpenClaw 实例。
+ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslation) AI Agent 框架的可视化管理面板。**内置智能 AI 助手**，帮你一键安装 OpenClaw、自动诊断配置、排查问题、修复错误。8 大工具 + 4 种模式 + 交互式问答，从新手到老手都能轻松管理。
 
 > 🌐 **官网**: [claw.qt.cool](https://claw.qt.cool/)  |  📦 **下载**: [GitHub Releases](https://github.com/qingchencloud/clawpanel/releases/latest)
 
@@ -107,6 +107,8 @@ docker run -d --name clawpanel --restart unless-stopped \
   <img src="docs/feature-showcase.gif" width="800" alt="功能矩阵">
 </p>
 
+- **🤖 AI 助手（全新·重磅）** — 内置独立 AI 助手，4 种操作模式 + 8 大工具 + 交互式问答，详见下方 [AI 助手亮点](#-ai-助手亮点)
+- **🖼️ 图片识别** — 粘贴截图或拖拽图片，AI 自动识别分析，支持多模态图文混排对话
 - **仪表盘** — 系统概览，服务状态实时监控，快捷操作
 - **服务管理** — OpenClaw 启停控制、版本检测与一键升级、Gateway 安装/卸载、配置备份与还原
 - **模型配置** — 多服务商管理、模型增删改查、批量连通性测试、延迟检测、拖拽排序、自动保存+撤销
@@ -123,6 +125,26 @@ docker run -d --name clawpanel --restart unless-stopped \
 <p align="center">
   <img src="docs/quick-stats.gif" width="800" alt="ClawPanel 数据概览">
 </p>
+
+<p align="center">
+  <img src="docs/00.png" width="800" alt="AI 助手">
+</p>
+<p align="center"><em>🤖 AI 助手 — 8 大技能卡片，一键触发配置检查、Gateway 诊断、环境检测、一键排障等常用操作</em></p>
+
+<p align="center">
+  <img src="docs/11.png" width="800" alt="AI 助手工具调用实战">
+</p>
+<p align="center"><em>🔧 AI 实战 — 自动调用工具：获取系统信息 → 列出目录 → 读取配置 → 生成健康检查报告，全程可视化</em></p>
+
+<p align="center">
+  <img src="docs/12.png" width="800" alt="AI 助手设置">
+</p>
+<p align="center"><em>⚙️ AI 设置 — 独立模型配置，支持任意 OpenAI 兼容 API，无需安装 OpenClaw 也能使用 AI 助手</em></p>
+
+<p align="center">
+  <img src="docs/13.png" width="800" alt="AI 图片识别">
+</p>
+<p align="center"><em>🖼️ 图片识别 — 粘贴截图或拖拽图片，AI 自动识别分析内容，多模态图文混排对话</em></p>
 
 <p align="center">
   <img src="docs/01.png" width="800" alt="仪表盘">
@@ -178,6 +200,68 @@ docker run -d --name clawpanel --restart unless-stopped \
 <p align="center"><em>系统诊断 — 全面健康检测与一键修复</em></p>
 
 </details>
+
+## 🤖 AI 助手亮点
+
+ClawPanel 内置的 AI 助手不只是聊天机器人——它能**直接操作你的系统**，帮你诊断、修复、甚至提交 PR。
+
+### 四种操作模式
+
+一键切换，界面颜色随模式变化，清晰感知当前权限状态：
+
+| 模式 | 图标 | 工具 | 写文件 | 确认 | 适用场景 |
+|------|------|------|--------|------|---------|
+| **聊天** | 💬 | ❌ | ❌ | — | 纯问答，不触碰系统 |
+| **规划** | 📋 | ✅ | ❌ | ✅ | 读配置/查日志，输出方案不动文件 |
+| **执行** | ⚡ | ✅ | ✅ | ✅ | 正常干活，危险操作弹确认 |
+| **无限** | ∞ | ✅ | ✅ | ❌ | 全自动，工具调用不弹窗 |
+
+设置中还有**工具开关**（终端/文件），优先级高于模式——关掉终端，即使无限模式也调不了命令。
+
+### 八大工具
+
+| 工具 | 功能 | 示例 |
+|------|------|------|
+| `ask_user` | 向用户提问（单选/多选/文本） | "选择要提交到哪个仓库？" |
+| `get_system_info` | 获取 OS、架构、主目录 | 自动判断该用 PowerShell 还是 Bash |
+| `run_command` | 执行 Shell 命令 | 重启 Gateway、查看日志 |
+| `read_file` | 读取文件 | 读取 openclaw.json 分析配置 |
+| `write_file` | 写入文件 | 修复配置错误、生成脚本 |
+| `list_directory` | 浏览目录 | 列出 .openclaw/ 结构 |
+| `list_processes` | 查看进程 | 检查 Gateway 是否在运行 |
+| `check_port` | 检测端口占用 | 18789 端口被谁占了？ |
+
+### 交互式问答（ask_user）
+
+AI 可以通过 `ask_user` 工具向你提问，支持三种交互方式：
+
+- **单选** — 从多个方案中选一个，还能输入自定义答案
+- **多选** — 勾选多项，比如"选择要检查的组件"
+- **文本** — 自由输入，比如"描述你遇到的问题"
+
+AI 等你回答后才会继续操作，实现真正的**人机协作**。
+
+### PR 助手 & Bug 报告
+
+发现 Bug？AI 不只是告诉你怎么修——它**直接帮你修**：
+
+1. 🐛 **提交 Bug 报告** — AI 自动收集系统环境、读取错误日志，按标准模板整理成 GitHub Issue，你复制粘贴就能提交
+2. 🔀 **PR 助手** — AI 分析 Bug 根因 → 定位代码 → 生成修复方案 → 通过 `run_command` 执行 git 命令完成 Fork/Branch/Commit/Push，**用户只需点确认**
+
+### 内置技能卡片
+
+欢迎页提供一键触发的常用技能：
+
+| 技能 | 功能 |
+|------|------|
+| 🔧 检查配置 | 读取并分析 openclaw.json |
+| 🏥 诊断 Gateway | 检查进程、端口、日志 |
+| 📂 浏览目录 | 查看 .openclaw 目录结构 |
+| 💻 检查环境 | Node.js、npm 版本检测 |
+| 📋 分析日志 | 搜索 ERROR/WARN 关键词 |
+| 🔨 一键排障 | 自动检测并修复常见问题 |
+| 🐛 提交 Bug | 整理 Issue 提交到 GitHub |
+| 🔀 PR 助手 | 定位 Bug 并生成修复 PR |
 
 ## 技术架构
 

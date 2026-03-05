@@ -703,21 +703,34 @@ function handleChatEvent(payload) {
       appendAudiosToEl(_currentAiBubble, _currentAiAudios)
       appendFilesToEl(_currentAiBubble, _currentAiFiles)
     }
-    // 添加时间戳 + 耗时
+    // 添加时间戳 + 耗时 + token 消耗
     const wrapper = _currentAiBubble?.parentElement
     if (wrapper) {
-      const time = document.createElement('div')
-      time.className = 'msg-time'
-      let timeStr = formatTime(new Date())
+      const meta = document.createElement('div')
+      meta.className = 'msg-meta'
+      let parts = [`<span class="msg-time">${formatTime(new Date())}</span>`]
       // 计算响应耗时
+      let durStr = ''
       if (payload.durationMs) {
-        timeStr += ` · ${(payload.durationMs / 1000).toFixed(1)}s`
+        durStr = (payload.durationMs / 1000).toFixed(1) + 's'
       } else if (_streamStartTime) {
-        const dur = ((Date.now() - _streamStartTime) / 1000).toFixed(1)
-        timeStr += ` · ${dur}s`
+        durStr = ((Date.now() - _streamStartTime) / 1000).toFixed(1) + 's'
       }
-      time.textContent = timeStr
-      wrapper.appendChild(time)
+      if (durStr) parts.push(`<span class="meta-sep">·</span><span class="msg-duration">⏱ ${durStr}</span>`)
+      // token 消耗（从 payload.usage 或 payload.message.usage 提取）
+      const usage = payload.usage || payload.message?.usage || null
+      if (usage) {
+        const inp = usage.input_tokens || usage.prompt_tokens || 0
+        const out = usage.output_tokens || usage.completion_tokens || 0
+        const total = usage.total_tokens || (inp + out)
+        if (total > 0) {
+          let tokenStr = `${total} tokens`
+          if (inp && out) tokenStr = `↑${inp} ↓${out}`
+          parts.push(`<span class="meta-sep">·</span><span class="msg-tokens">${tokenStr}</span>`)
+        }
+      }
+      meta.innerHTML = parts.join('')
+      wrapper.appendChild(meta)
     }
     if (_currentAiText || _currentAiImages.length) {
       saveMessage({
@@ -1101,12 +1114,12 @@ function appendUserMessage(text, attachments = [], msgTime) {
     bubble.appendChild(textNode)
   }
 
-  const time = document.createElement('div')
-  time.className = 'msg-time'
-  time.textContent = formatTime(msgTime || new Date())
+  const meta = document.createElement('div')
+  meta.className = 'msg-meta'
+  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span>`
 
   wrap.appendChild(bubble)
-  wrap.appendChild(time)
+  wrap.appendChild(meta)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
 }
@@ -1124,12 +1137,12 @@ function appendAiMessage(text, msgTime, images, videos, audios, files) {
   // 图片点击灯箱
   bubble.querySelectorAll('img').forEach(img => { if (!img.onclick) img.onclick = () => showLightbox(img.src) })
 
-  const time = document.createElement('div')
-  time.className = 'msg-time'
-  time.textContent = formatTime(msgTime || new Date())
+  const meta = document.createElement('div')
+  meta.className = 'msg-meta'
+  meta.innerHTML = `<span class="msg-time">${formatTime(msgTime || new Date())}</span>`
 
   wrap.appendChild(bubble)
-  wrap.appendChild(time)
+  wrap.appendChild(meta)
   _messagesEl.insertBefore(wrap, _typingEl)
   scrollToBottom()
 }

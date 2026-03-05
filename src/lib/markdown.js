@@ -17,18 +17,24 @@ const KEYWORDS = new Set([
 
 function highlightCode(code, lang) {
   const escaped = escapeHtml(code)
+  // Two-phase: mark with control chars first, convert to HTML last
+  // Prevents keyword regex from matching "class" inside <span class="..."> attributes
+  const S = '\x02', E = '\x03'
+  const CLS = ['hl-number','hl-comment','hl-string','hl-type','hl-func','hl-keyword']
   return escaped
-    .replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>')
-    .replace(/(\/\/.*$|#.*$)/gm, '<span class="hl-comment">$1</span>')
-    .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, `${S}0${E}$1${S}c${E}`)
+    .replace(/(\/\/.*$|#.*$)/gm, `${S}1${E}$1${S}c${E}`)
+    .replace(/(\/\*[\s\S]*?\*\/)/g, `${S}1${E}$1${S}c${E}`)
     .replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;|&#x27;(?:[^&]|&(?!#x27;))*?&#x27;|`[^`]*`)/g,
-      '<span class="hl-string">$1</span>')
+      `${S}2${E}$1${S}c${E}`)
     .replace(/\b([A-Z][a-zA-Z0-9_]*)\b/g, (m, w) =>
-      KEYWORDS.has(w) ? m : `<span class="hl-type">${w}</span>`)
+      KEYWORDS.has(w) ? m : `${S}3${E}${w}${S}c${E}`)
     .replace(/\b(\w+)(?=\s*\()/g, (m, w) =>
-      KEYWORDS.has(w) ? m : `<span class="hl-func">${w}</span>`)
+      KEYWORDS.has(w) ? m : `${S}4${E}${w}${S}c${E}`)
     .replace(/\b(\w+)\b/g, (m, w) =>
-      KEYWORDS.has(w) ? `<span class="hl-keyword">${w}</span>` : m)
+      KEYWORDS.has(w) ? `${S}5${E}${w}${S}c${E}` : m)
+    .replace(/\x02([0-5])\x03/g, (_, i) => `<span class="${CLS[+i]}">`)
+    .replace(/\x02c\x03/g, '</span>')
 }
 
 function escapeHtml(str) {

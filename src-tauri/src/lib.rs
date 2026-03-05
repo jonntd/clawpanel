@@ -3,7 +3,7 @@ mod models;
 mod tray;
 mod utils;
 
-use commands::{agent, config, device, extensions, logs, memory, pairing, service};
+use commands::{agent, assistant, config, device, extensions, logs, memory, pairing, service};
 
 pub fn run() {
     tauri::Builder::default()
@@ -74,6 +74,19 @@ pub fn run() {
             agent::update_agent_identity,
             agent::update_agent_model,
             agent::backup_agent,
+            // AI 助手工具
+            assistant::assistant_exec,
+            assistant::assistant_read_file,
+            assistant::assistant_write_file,
+            assistant::assistant_list_dir,
+            assistant::assistant_system_info,
+            assistant::assistant_list_processes,
+            assistant::assistant_check_port,
+            // 数据目录 & 图片存储
+            assistant::assistant_ensure_data_dir,
+            assistant::assistant_save_image,
+            assistant::assistant_load_image,
+            assistant::assistant_delete_image,
         ])
         .run(tauri::generate_context!())
         .expect("启动 ClawPanel 失败");
