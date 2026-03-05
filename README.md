@@ -75,26 +75,31 @@ ClawPanel 是 [OpenClaw](https://github.com/1186258278/OpenClawChineseTranslatio
 | DEB | `ClawPanel_x.x.x_amd64.deb` | Debian / Ubuntu：`sudo dpkg -i *.deb` |
 | RPM | `ClawPanel-x.x.x-1.x86_64.rpm` | Fedora / RHEL：`sudo rpm -i *.rpm` |
 
-### Linux 服务器（无 GUI）
+### Linux 服务器（Web 版）
 
-不需要桌面环境，一键命令部署 OpenClaw Gateway，通过端口远程访问：
+没有桌面环境？一键部署 ClawPanel Web 版，通过浏览器远程管理 OpenClaw：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash
 ```
 
-📖 详细教程见 [Linux 服务器部署指南](docs/linux-deploy.md)
+部署完成后访问 `http://服务器IP:1420`，功能与桌面版一致。
+
+📖 详细教程见 [Linux 部署指南](docs/linux-deploy.md)
 
 ### Docker 部署
 
 ```bash
-docker run -d --name openclaw --restart unless-stopped \
-  -p 18789:18789 -v openclaw-data:/root/.openclaw \
+docker run -d --name clawpanel --restart unless-stopped \
+  -p 1420:1420 -v clawpanel-data:/root/.openclaw \
   node:22-slim \
-  sh -c "npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && openclaw gateway start"
+  sh -c "apt-get update && apt-get install -y git && \
+    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && \
+    git clone https://github.com/qingchencloud/clawpanel.git /app && \
+    cd /app && npm install && npx vite --port 1420 --host 0.0.0.0"
 ```
 
-📖 详细教程见 [Docker 部署指南](docs/docker-deploy.md)（含 Compose、Dockerfile、Nginx 反向代理、Ollama 联动等）
+📖 详细教程见 [Docker 部署指南](docs/docker-deploy.md)（含 Compose、自定义镜像、Nginx 反向代理等）
 
 ## 功能特性
 

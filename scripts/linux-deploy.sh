@@ -2,9 +2,15 @@
 set -e
 
 echo "=========================================="
-echo "  OpenClaw 一键部署脚本"
+echo "  ClawPanel Web 版 一键部署脚本"
+echo "  在 Linux 上通过浏览器管理 OpenClaw"
 echo "=========================================="
 echo ""
+
+INSTALL_DIR="/opt/clawpanel"
+PANEL_PORT=1420
+REPO_URL="https://github.com/qingchencloud/clawpanel.git"
+NPM_REGISTRY="https://registry.npmmirror.com"
 
 # 检测系统
 detect_os() {
@@ -28,212 +34,163 @@ install_node() {
             echo "✅ Node.js $(node -v) 已安装"
             return 0
         else
-            echo "⚠️  Node.js 版本过低 ($(node -v))，需要 >= 18"
+            echo "⚠️  Node.js $(node -v) 版本过低，需要 18+"
         fi
     fi
 
-    echo "📦 安装 Node.js 22..."
-
+    echo "📦 安装 Node.js 22 LTS..."
     case "$OS" in
         ubuntu|debian|linuxmint|pop)
             curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             sudo apt-get install -y nodejs
             ;;
-        centos|rhel|fedora|rocky|alma|opencloudos)
+        centos|rhel|fedora|rocky|alma)
             curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
-            sudo yum install -y nodejs || sudo dnf install -y nodejs
+            sudo yum install -y nodejs
             ;;
         alpine)
-            sudo apk add nodejs npm
+            sudo apk add nodejs npm git
             ;;
         arch|manjaro)
-            sudo pacman -S --noconfirm nodejs npm
+            sudo pacman -Sy --noconfirm nodejs npm git
             ;;
         *)
-            # 通用方式：使用 nvm
-            echo "🔧 未识别的发行版，使用 nvm 安装..."
-            if ! command -v nvm &> /dev/null; then
-                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-                export NVM_DIR="$HOME/.nvm"
-                [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-            fi
-            nvm install 22
-            nvm alias default 22
+            echo "❌ 不支持自动安装 Node.js，请手动安装后重试"
+            echo "   参考: https://nodejs.org/en/download/"
+            exit 1
             ;;
     esac
+    echo "✅ Node.js $(node -v) 安装完成"
+}
 
-    echo "✅ Node.js $(node -v) 安装成功"
+# 安装 Git
+install_git() {
+    if command -v git &> /dev/null; then
+        echo "✅ Git 已安装"
+        return 0
+    fi
+
+    echo "📦 安装 Git..."
+    case "$OS" in
+        ubuntu|debian|linuxmint|pop)
+            sudo apt-get update && sudo apt-get install -y git
+            ;;
+        centos|rhel|fedora|rocky|alma)
+            sudo yum install -y git
+            ;;
+        alpine)
+            sudo apk add git
+            ;;
+        arch|manjaro)
+            sudo pacman -Sy --noconfirm git
+            ;;
+    esac
+    echo "✅ Git 安装完成"
 }
 
 # 安装 OpenClaw
 install_openclaw() {
-    echo "📦 安装 OpenClaw 汉化版..."
-
-    # 检查是否需要修复 npm 权限
-    local npm_prefix=$(npm config get prefix 2>/dev/null || echo "/usr/local")
-    if [ ! -w "$npm_prefix/lib" ] 2>/dev/null; then
-        # 无写入权限，使用用户目录
-        if [ "$(id -u)" -ne 0 ]; then
-            echo "🔧 配置 npm 用户目录..."
-            mkdir -p ~/.npm-global
-            npm config set prefix '~/.npm-global'
-            export PATH=~/.npm-global/bin:$PATH
-            if ! grep -q '.npm-global/bin' ~/.bashrc 2>/dev/null; then
-                echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.bashrc
-            fi
-        fi
-    fi
-
-    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
-
-    # 验证
     if command -v openclaw &> /dev/null; then
-        echo "✅ OpenClaw $(openclaw --version) 安装成功"
+        echo "✅ OpenClaw 已安装: $(openclaw --version 2>/dev/null || echo '未知版本')"
     else
-        echo "❌ openclaw 命令未找到，请检查 PATH"
-        echo "   尝试: source ~/.bashrc && openclaw --version"
-        exit 1
+        echo "📦 安装 OpenClaw 汉化版..."
+        npm install -g @qingchencloud/openclaw-zh --registry "$NPM_REGISTRY"
+        echo "✅ OpenClaw 安装完成"
+    fi
+
+    # 初始化配置（如果不存在）
+    if [ ! -f "$HOME/.openclaw/openclaw.json" ]; then
+        echo "🔧 初始化 OpenClaw 配置..."
+        openclaw init 2>/dev/null || true
     fi
 }
 
-# 初始化配置
-init_config() {
-    mkdir -p ~/.openclaw
-
-    if [ -f ~/.openclaw/openclaw.json ]; then
-        echo "✅ 配置文件已存在，跳过初始化"
-        return 0
+# 克隆并安装 ClawPanel
+install_clawpanel() {
+    if [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/package.json" ]; then
+        echo "📦 ClawPanel 已存在，更新中..."
+        cd "$INSTALL_DIR"
+        git pull origin main 2>/dev/null || true
+        npm install
+    else
+        echo "📦 克隆 ClawPanel..."
+        sudo mkdir -p "$INSTALL_DIR"
+        sudo chown -R $(whoami) "$INSTALL_DIR"
+        git clone "$REPO_URL" "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+        npm install
     fi
-
-    echo "📝 写入默认配置..."
-    cat > ~/.openclaw/openclaw.json << 'EOF'
-{
-  "mode": "local",
-  "tools": {
-    "profile": "full",
-    "sessions": {
-      "visibility": "all"
-    }
-  },
-  "gateway": {
-    "port": 18789,
-    "bind": "lan",
-    "auth": {}
-  },
-  "models": {
-    "providers": {}
-  }
-}
-EOF
-
-    echo "✅ 配置已写入 ~/.openclaw/openclaw.json"
+    echo "✅ ClawPanel 安装完成: $INSTALL_DIR"
 }
 
-# 安装 systemd 服务
-install_service() {
-    # 检查 systemd 是否可用
+# 创建 systemd 服务
+setup_systemd() {
     if ! command -v systemctl &> /dev/null; then
-        echo "⚠️  systemd 不可用，使用 nohup 后台启动..."
-        nohup openclaw gateway start > ~/.openclaw/gateway.log 2>&1 &
-        echo $! > ~/.openclaw/gateway.pid
-        echo "✅ Gateway 已后台启动 (PID: $(cat ~/.openclaw/gateway.pid))"
+        echo "⚠️  systemd 不可用，请手动启动："
+        echo "   cd $INSTALL_DIR && npx vite --port $PANEL_PORT --host 0.0.0.0"
         return 0
     fi
 
-    echo "⚙️  配置 systemd 服务..."
-
-    local node_path=$(dirname $(which node))
-    local openclaw_path=$(which openclaw)
-
-    sudo tee /etc/systemd/system/openclaw.service > /dev/null << SVCEOF
+    echo "🔧 创建 systemd 服务..."
+    sudo tee /etc/systemd/system/clawpanel.service > /dev/null << EOF
 [Unit]
-Description=OpenClaw Gateway
+Description=ClawPanel Web - OpenClaw Management Panel
 After=network.target
 
 [Service]
 Type=simple
-User=$USER
-Environment=PATH=$node_path:/usr/local/bin:/usr/bin:/bin
-ExecStart=$openclaw_path gateway start
+User=$(whoami)
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$(which npx) vite --port $PANEL_PORT --host 0.0.0.0
 Restart=on-failure
 RestartSec=5
-WorkingDirectory=$HOME
+Environment=NODE_ENV=production
+Environment=HOME=$HOME
 
 [Install]
 WantedBy=multi-user.target
-SVCEOF
+EOF
 
     sudo systemctl daemon-reload
-    sudo systemctl enable openclaw
-    sudo systemctl start openclaw
-
-    # 等待启动
-    sleep 3
-    if sudo systemctl is-active --quiet openclaw; then
-        echo "✅ Gateway 服务已启动并设为开机自启"
-    else
-        echo "⚠️  Gateway 服务可能未启动，请检查: journalctl -u openclaw -n 20"
-    fi
+    sudo systemctl enable clawpanel
+    sudo systemctl start clawpanel
+    echo "✅ systemd 服务已创建并启动"
 }
 
-# 获取服务器 IP
-get_server_ip() {
-    local ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-    if [ -z "$ip" ]; then
-        ip=$(ip route get 1 2>/dev/null | awk '{print $7; exit}')
-    fi
-    if [ -z "$ip" ]; then
-        ip="localhost"
-    fi
-    echo "$ip"
+# 获取本机 IP
+get_local_ip() {
+    ip route get 1 2>/dev/null | awk '{print $7; exit}' || \
+    hostname -I 2>/dev/null | awk '{print $1}' || \
+    echo "localhost"
 }
 
 # 主流程
 main() {
     detect_os
     echo ""
-
+    install_git
     install_node
-    echo ""
-
     install_openclaw
+    install_clawpanel
+    setup_systemd
+
+    local ip=$(get_local_ip)
     echo ""
-
-    init_config
-    echo ""
-
-    install_service
-    echo ""
-
-    local server_ip=$(get_server_ip)
-    local port=$(grep -o '"port":[[:space:]]*[0-9]*' ~/.openclaw/openclaw.json 2>/dev/null | head -1 | grep -o '[0-9]*' || echo "18789")
-
     echo "=========================================="
-    echo "  ✅ 部署完成！"
+    echo "  ✅ ClawPanel Web 版部署完成！"
     echo "=========================================="
     echo ""
-    echo "  Gateway 地址: http://${server_ip}:${port}"
+    echo "  🌐 访问地址: http://${ip}:${PANEL_PORT}"
+    echo "  📁 安装目录: $INSTALL_DIR"
+    echo "  📋 配置目录: $HOME/.openclaw/"
     echo ""
-    echo "  管理命令:"
-    if command -v systemctl &> /dev/null; then
-        echo "    sudo systemctl status openclaw   # 查看状态"
-        echo "    sudo systemctl restart openclaw  # 重启"
-        echo "    journalctl -u openclaw -f        # 查看日志"
-    else
-        echo "    cat ~/.openclaw/gateway.pid      # 查看 PID"
-        echo "    tail -f ~/.openclaw/gateway.log  # 查看日志"
-        echo "    kill \$(cat ~/.openclaw/gateway.pid)  # 停止"
-    fi
+    echo "  常用命令："
+    echo "    systemctl status clawpanel    # 查看状态"
+    echo "    systemctl restart clawpanel   # 重启面板"
+    echo "    journalctl -u clawpanel -f    # 查看日志"
     echo ""
-    echo "  下一步:"
-    echo "    1. 编辑 ~/.openclaw/openclaw.json 添加模型 API Key"
-    if command -v systemctl &> /dev/null; then
-        echo "    2. sudo systemctl restart openclaw"
-    else
-        echo "    2. 重启 Gateway"
-    fi
-    echo "    3. 用 ClawPanel 或 ClawApp 连接管理"
-    echo ""
+    echo "  用浏览器打开上面的地址，即可管理 OpenClaw。"
+    echo "=========================================="
 }
 
 main "$@"

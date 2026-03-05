@@ -1,665 +1,350 @@
-# Docker 部署指南
+# ClawPanel Docker 部署指南
 
-使用 Docker 一键部署 OpenClaw Gateway，无需安装 Node.js，开箱即用。
+本文介绍如何用 Docker 部署 **ClawPanel Web 版**，通过浏览器远程管理 OpenClaw。
+
+> **ClawPanel** 有 Win/Mac 桌面客户端，但 Linux 没有桌面版。Docker 部署让你在任何有 Docker 的机器上一键跑起 ClawPanel Web 管理面板。
+
+---
 
 ## 目录
 
-- [快速开始](#快速开始)
-- [Docker Compose 部署](#docker-compose-部署)
-- [配置说明](#配置说明)
-- [模型配置](#模型配置)
-- [数据持久化](#数据持久化)
-- [网络与端口](#网络与端口)
-- [反向代理](#反向代理)
+- [架构说明](#架构说明)
+- [方式一：快速启动](#方式一快速启动)
+- [方式二：Docker Compose（推荐）](#方式二docker-compose推荐)
+- [方式三：自定义 Dockerfile](#方式三自定义-dockerfile)
+- [配置与数据](#配置与数据)
+- [连接 Gateway](#连接-gateway)
+- [Nginx 反向代理](#nginx-反向代理)
 - [常用命令](#常用命令)
-- [升级](#升级)
+- [更新升级](#更新升级)
 - [常见问题](#常见问题)
 
 ---
 
-## 快速开始
+## 架构说明
 
-**一条命令启动：**
-
-```bash
-docker run -d \
-  --name openclaw \
-  --restart unless-stopped \
-  -p 18789:18789 \
-  -v openclaw-data:/root/.openclaw \
-  node:22-slim \
-  sh -c "npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && openclaw gateway start"
+```
+浏览器 ──HTTP──▶ ClawPanel Web 容器 (:1420)
+                        │
+                        ├── /__api/*   读写 ~/.openclaw/ 配置
+                        ├── /ws        WebSocket 代理 → Gateway
+                        └── 管理 Gateway 进程
+                              │
+                              ▼
+              OpenClaw Gateway (容器内或宿主机, :18789)
 ```
 
-启动后访问 `http://你的服务器IP:18789`。
-
-> ⚠️ 首次启动需要下载安装 OpenClaw，可能需要 1-2 分钟。后续重启会直接启动。
+ClawPanel Web 版 = Vite 开发服务器 + `dev-api.js` 后端中间件，在容器内提供完整管理功能。
 
 ---
 
-## Docker Compose 部署
+## 方式一：快速启动
 
-推荐使用 Docker Compose，配置更清晰，管理更方便。
-
-### 1. 创建项目目录
+最简单的方式，一条命令搞定：
 
 ```bash
-mkdir -p ~/openclaw && cd ~/openclaw
+docker run -d \
+  --name clawpanel \
+  --restart unless-stopped \
+  -p 1420:1420 \
+  -v clawpanel-data:/root/.openclaw \
+  node:22-slim \
+  sh -c "\
+    apt-get update && apt-get install -y git && \
+    npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com && \
+    openclaw init 2>/dev/null || true && \
+    git clone https://github.com/qingchencloud/clawpanel.git /app && \
+    cd /app && npm install && \
+    npx vite --port 1420 --host 0.0.0.0"
 ```
 
-### 2. 创建配置文件
+访问 `http://服务器IP:1420` 即可使用。
 
-```bash
-cat > openclaw.json << 'EOF'
-{
-  "mode": "local",
-  "tools": {
-    "profile": "full",
-    "sessions": {
-      "visibility": "all"
-    }
-  },
-  "gateway": {
-    "port": 18789,
-    "bind": "lan",
-    "auth": {
-      "mode": "token",
-      "token": "your-secret-token-change-me"
-    }
-  },
-  "models": {
-    "providers": {
-      "deepseek": {
-        "baseUrl": "https://api.deepseek.com/v1",
-        "apiKey": "sk-your-api-key",
-        "models": [
-          { "id": "deepseek-chat", "name": "DeepSeek V3" },
-          { "id": "deepseek-reasoner", "name": "DeepSeek R1" }
-        ]
-      }
-    }
-  },
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "deepseek/deepseek-chat"
-      }
-    }
-  }
-}
-EOF
-```
+> ⚠️ 这种方式每次重建容器都要重新 clone + npm install，适合快速体验。生产环境推荐使用 Compose 或自定义镜像。
 
-> 记得修改 `token` 和 `apiKey` 为你的实际值。
+---
 
-### 3. 创建 docker-compose.yml
+## 方式二：Docker Compose（推荐）
 
-```bash
-cat > docker-compose.yml << 'EOF'
+创建 `docker-compose.yml`：
+
+```yaml
 version: '3.8'
 
 services:
-  openclaw:
+  clawpanel:
+    build:
+      context: .
+      dockerfile: Dockerfile.clawpanel
+    container_name: clawpanel
+    restart: unless-stopped
+    ports:
+      - "1420:1420"
+    volumes:
+      - openclaw-data:/root/.openclaw
+    environment:
+      - NODE_ENV=production
+
+  gateway:
     image: node:22-slim
-    container_name: openclaw
+    container_name: openclaw-gateway
     restart: unless-stopped
     ports:
       - "18789:18789"
     volumes:
-      - ./openclaw.json:/root/.openclaw/openclaw.json
       - openclaw-data:/root/.openclaw
     command: >
-      sh -c "
-        npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com 2>/dev/null;
-        openclaw gateway start
-      "
-    environment:
-      - NODE_ENV=production
+      sh -c "npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com &&
+             openclaw init 2>/dev/null || true &&
+             openclaw gateway start --foreground"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 60s
 
 volumes:
   openclaw-data:
-EOF
 ```
 
-### 4. 启动
+同目录下创建 `Dockerfile.clawpanel`：
+
+```dockerfile
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+RUN git clone https://github.com/qingchencloud/clawpanel.git . && \
+    npm install
+
+EXPOSE 1420
+
+CMD ["npx", "vite", "--port", "1420", "--host", "0.0.0.0"]
+```
+
+启动：
 
 ```bash
 docker compose up -d
 ```
 
-### 5. 查看日志
-
-```bash
-docker compose logs -f
-```
-
-看到 `Gateway listening on http://0.0.0.0:18789` 就说明启动成功了。
+这样 ClawPanel 和 Gateway 共享同一个 `openclaw-data` 卷，ClawPanel 可以直接管理 Gateway。
 
 ---
 
-## 使用自定义 Dockerfile（推荐生产环境）
+## 方式三：自定义 Dockerfile
 
-上面的方式每次容器重建都要重新 `npm install`，生产环境建议构建自定义镜像：
+如果只需要 ClawPanel Web（Gateway 在宿主机或其他地方运行）：
 
-### Dockerfile
-
-```bash
-cat > Dockerfile << 'EOF'
+```dockerfile
 FROM node:22-slim
 
-# 安装 OpenClaw
-RUN npm install -g @qingchencloud/openclaw-zh \
-    --registry https://registry.npmmirror.com \
-    && npm cache clean --force
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# 安装 curl 用于健康检查
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+# 安装 OpenClaw CLI（ClawPanel 需要读写配置）
+RUN npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
 
-# 配置目录
-RUN mkdir -p /root/.openclaw
-VOLUME /root/.openclaw
+WORKDIR /app
+RUN git clone https://github.com/qingchencloud/clawpanel.git . && \
+    npm install
 
-EXPOSE 18789
+EXPOSE 1420
 
-CMD ["openclaw", "gateway", "start"]
-EOF
+CMD ["npx", "vite", "--port", "1420", "--host", "0.0.0.0"]
 ```
 
-### docker-compose.yml（使用自定义镜像）
+构建并运行：
 
 ```bash
-cat > docker-compose.yml << 'EOF'
-version: '3.8'
-
-services:
-  openclaw:
-    build: .
-    container_name: openclaw
-    restart: unless-stopped
-    ports:
-      - "18789:18789"
-    volumes:
-      - ./openclaw.json:/root/.openclaw/openclaw.json
-      - openclaw-data:/root/.openclaw
-    environment:
-      - NODE_ENV=production
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-volumes:
-  openclaw-data:
-EOF
-```
-
-```bash
-# 构建并启动
-docker compose up -d --build
-```
-
-这样容器重启时直接启动 Gateway，无需重复安装。
-
----
-
-## 配置说明
-
-### 核心配置项
-
-| 字段 | 说明 | 默认值 |
-|------|------|--------|
-| `mode` | 运行模式，必须设置 | `"local"` |
-| `tools.profile` | Agent 工具权限 | `"full"` |
-| `tools.sessions.visibility` | 会话可见性 | `"all"` |
-| `gateway.port` | Gateway 监听端口 | `18789` |
-| `gateway.bind` | 绑定范围 | `"lan"` |
-| `gateway.auth.mode` | 认证方式 | `"token"` |
-| `gateway.auth.token` | 访问密钥 | 无 |
-
-### bind 选项
-
-| 值 | 说明 |
-|------|------|
-| `"loopback"` | 仅容器内部访问（127.0.0.1），Docker 环境下**不要用这个** |
-| `"lan"` | 所有网卡（0.0.0.0），Docker 环境**必须用这个** |
-
-> ⚠️ Docker 容器内必须用 `"lan"`，否则端口映射无法工作。
-
----
-
-## 模型配置
-
-在 `openclaw.json` 的 `models.providers` 中添加服务商。以下是常见服务商示例：
-
-### DeepSeek
-
-```json
-{
-  "models": {
-    "providers": {
-      "deepseek": {
-        "baseUrl": "https://api.deepseek.com/v1",
-        "apiKey": "sk-xxxx",
-        "models": [
-          { "id": "deepseek-chat", "name": "DeepSeek V3" },
-          { "id": "deepseek-reasoner", "name": "DeepSeek R1" }
-        ]
-      }
-    }
-  }
-}
-```
-
-### OpenAI
-
-```json
-{
-  "openai": {
-    "baseUrl": "https://api.openai.com/v1",
-    "apiKey": "sk-xxxx",
-    "models": [
-      { "id": "gpt-4o", "name": "GPT-4o" },
-      { "id": "gpt-4o-mini", "name": "GPT-4o Mini" }
-    ]
-  }
-}
-```
-
-### Claude（通过兼容 API）
-
-```json
-{
-  "claude": {
-    "baseUrl": "https://your-claude-proxy.com/v1",
-    "apiKey": "sk-xxxx",
-    "models": [
-      { "id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4" }
-    ]
-  }
-}
-```
-
-### Ollama（本地模型）
-
-```json
-{
-  "ollama": {
-    "baseUrl": "http://host.docker.internal:11434/v1",
-    "apiKey": "ollama",
-    "models": [
-      { "id": "qwen2.5:14b", "name": "Qwen 2.5 14B" },
-      { "id": "deepseek-r1:8b", "name": "DeepSeek R1 8B" }
-    ]
-  }
-}
-```
-
-> 注意 Ollama 在 Docker 里要用 `host.docker.internal` 访问宿主机，Linux 下需要加 `--add-host=host.docker.internal:host-gateway`。
-
-### Ollama + Docker 特殊配置
-
-如果 Ollama 也运行在同一台机器上：
-
-```yaml
-services:
-  openclaw:
-    # ... 其他配置 ...
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-```
-
-或者让 OpenClaw 和 Ollama 共享 Docker 网络：
-
-```yaml
-services:
-  openclaw:
-    # ... 其他配置 ...
-    network_mode: host  # 直接使用宿主机网络，Ollama 用 localhost:11434
-
-  # 或者 Ollama 也在 Compose 里
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
+docker build -t clawpanel .
+docker run -d \
+  --name clawpanel \
+  --restart unless-stopped \
+  -p 1420:1420 \
+  -v ~/.openclaw:/root/.openclaw \
+  clawpanel
 ```
 
 ---
 
-## 数据持久化
+## 配置与数据
 
-OpenClaw 的所有数据在 `/root/.openclaw` 目录：
+### 数据目录
 
-| 路径 | 内容 |
-|------|------|
-| `openclaw.json` | 全局配置 |
-| `agents/` | Agent 数据 |
-| `memories/` | 记忆文件 |
+ClawPanel 的所有数据都存储在 `~/.openclaw/` 目录中：
+
+| 文件/目录 | 说明 |
+|-----------|------|
+| `openclaw.json` | 主配置文件（模型、Gateway、Agent 设置） |
+| `mcp.json` | MCP 服务器配置 |
+| `logs/` | Gateway 日志 |
 | `backups/` | 配置备份 |
+| `agents/` | Agent 数据（记忆、工作区） |
+| `devices/` | 设备配对信息 |
 
-通过 Docker Volume 或 bind mount 持久化：
+### 持久化
 
-```yaml
-# Docker Volume（推荐，Docker 自动管理）
-volumes:
-  - openclaw-data:/root/.openclaw
-
-# Bind mount（挂载本地目录，方便直接编辑）
-volumes:
-  - ./data:/root/.openclaw
-```
-
-### 备份
+使用 Docker Volume 或 Bind Mount 持久化数据：
 
 ```bash
-# 备份整个数据目录
-docker cp openclaw:/root/.openclaw ./openclaw-backup-$(date +%Y%m%d)
+# Docker Volume（推荐）
+-v clawpanel-data:/root/.openclaw
 
-# 仅备份配置
-docker cp openclaw:/root/.openclaw/openclaw.json ./openclaw.json.bak
+# Bind Mount（方便直接查看文件）
+-v ~/.openclaw:/root/.openclaw
 ```
+
+### 初始配置
+
+首次启动如果没有 `openclaw.json`，可以先在容器内初始化：
+
+```bash
+docker exec -it clawpanel openclaw init
+```
+
+或者将已有配置挂载进去。
 
 ---
 
-## 网络与端口
+## 连接 Gateway
 
-### 修改端口
+### 场景一：Gateway 在同一个 Compose 中
 
-```yaml
-# docker-compose.yml
-ports:
-  - "8080:18789"  # 宿主机 8080 → 容器 18789
+使用上面的 Compose 配置，ClawPanel 和 Gateway 共享数据卷，ClawPanel 自动通过本地回环连接 Gateway。
+
+### 场景二：Gateway 在宿主机
+
+如果 Gateway 运行在宿主机（不在 Docker 中），ClawPanel 容器需要访问宿主机网络：
+
+```bash
+docker run -d \
+  --name clawpanel \
+  --network host \
+  -v ~/.openclaw:/root/.openclaw \
+  clawpanel
 ```
 
-或者同时修改配置文件中的端口：
+使用 `--network host` 后，容器共享宿主机网络，ClawPanel 可以直接连接 `127.0.0.1:18789`。
 
-```json
-{
-  "gateway": {
-    "port": 8080
-  }
-}
-```
+### 场景三：Gateway 在远程服务器
 
-```yaml
-ports:
-  - "8080:8080"
-```
-
-### 使用 host 网络
-
-```yaml
-services:
-  openclaw:
-    network_mode: host
-    # 不需要 ports 映射，直接用宿主机端口
-```
-
-适用于需要直接访问宿主机服务（如 Ollama）的场景。
+修改 `openclaw.json` 中的 Gateway 端口配置，或在 ClawPanel 面板中设置 Gateway 地址。
 
 ---
 
-## 反向代理
+## Nginx 反向代理
 
-### Nginx + Docker Compose
-
-```yaml
-version: '3.8'
-
-services:
-  openclaw:
-    build: .
-    container_name: openclaw
-    restart: unless-stopped
-    volumes:
-      - ./openclaw.json:/root/.openclaw/openclaw.json
-      - openclaw-data:/root/.openclaw
-    # 不暴露端口到外部，只在内部网络
-
-  nginx:
-    image: nginx:alpine
-    container_name: openclaw-nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
-      - ./certs:/etc/nginx/certs
-    depends_on:
-      - openclaw
-
-volumes:
-  openclaw-data:
-```
-
-**nginx.conf：**
+如果希望用域名 + HTTPS 访问：
 
 ```nginx
 server {
     listen 80;
-    server_name ai.example.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name ai.example.com;
-
-    ssl_certificate     /etc/nginx/certs/fullchain.pem;
-    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    server_name panel.yourdomain.com;
 
     location / {
-        proxy_pass http://openclaw:18789;
+        proxy_pass http://127.0.0.1:1420;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
     }
 }
 ```
+
+> **重要：** 必须配置 WebSocket 升级头，否则 ClawPanel 无法通过 `/ws` 连接 Gateway。
 
 ---
 
 ## 常用命令
 
 ```bash
-# 启动
-docker compose up -d
-
-# 停止
-docker compose down
-
-# 重启
-docker compose restart
+# 查看状态
+docker ps | grep clawpanel
 
 # 查看日志
-docker compose logs -f
-
-# 查看最近 100 行日志
-docker compose logs --tail 100
+docker logs -f clawpanel
 
 # 进入容器
-docker exec -it openclaw sh
-
-# 查看容器状态
-docker compose ps
-
-# 重新构建并启动（修改了 Dockerfile 后）
-docker compose up -d --build
-```
-
----
-
-## 升级
-
-### 使用自定义 Dockerfile
-
-```bash
-cd ~/openclaw
-
-# 重新构建镜像（会拉取最新版 OpenClaw）
-docker compose build --no-cache
+docker exec -it clawpanel bash
 
 # 重启
-docker compose up -d
-```
+docker restart clawpanel
 
-### 使用 node 基础镜像（容器内升级）
-
-```bash
-# 进入容器
-docker exec -it openclaw sh
-
-# 升级
-npm install -g @qingchencloud/openclaw-zh --registry https://registry.npmmirror.com
-
-# 退出容器
-exit
-
-# 重启容器
-docker restart openclaw
+# 停止并删除
+docker stop clawpanel && docker rm clawpanel
 ```
 
 ---
 
-## 多实例部署
+## 更新升级
 
-在同一台机器运行多个 OpenClaw 实例（不同端口、不同配置）：
+### 更新 ClawPanel
 
-```yaml
-version: '3.8'
+```bash
+docker exec -it clawpanel bash -c "cd /app && git pull origin main && npm install"
+docker restart clawpanel
+```
 
-services:
-  openclaw-main:
-    build: .
-    container_name: openclaw-main
-    restart: unless-stopped
-    ports:
-      - "18789:18789"
-    volumes:
-      - ./config-main.json:/root/.openclaw/openclaw.json
-      - main-data:/root/.openclaw
+### 使用 Compose 重建
 
-  openclaw-dev:
-    build: .
-    container_name: openclaw-dev
-    restart: unless-stopped
-    ports:
-      - "18790:18789"
-    volumes:
-      - ./config-dev.json:/root/.openclaw/openclaw.json
-      - dev-data:/root/.openclaw
+```bash
+docker compose build --no-cache clawpanel
+docker compose up -d clawpanel
+```
 
-volumes:
-  main-data:
-  dev-data:
+### 更新 OpenClaw
+
+```bash
+docker exec -it clawpanel npm install -g @qingchencloud/openclaw-zh@latest --registry https://registry.npmmirror.com
 ```
 
 ---
 
 ## 常见问题
 
-### 容器启动后无法访问
+### Q: 容器启动后打开面板是空白？
 
-1. 确认 `gateway.bind` 是 `"lan"`（不是 `"loopback"`）
-2. 检查端口映射：`docker compose ps`
-3. 检查容器日志：`docker compose logs`
-4. 检查防火墙是否放行端口
+检查容器日志：
 
-### 首次启动很慢
-
-首次启动需要 `npm install` 安装 OpenClaw，耗时 1-2 分钟。建议使用[自定义 Dockerfile](#使用自定义-dockerfile推荐生产环境) 方案，构建时安装，启动时直接运行。
-
-### 容器重启后配置丢失
-
-确保使用了 volume 持久化：
-
-```yaml
-volumes:
-  - openclaw-data:/root/.openclaw
+```bash
+docker logs clawpanel
 ```
 
-或 bind mount 挂载本地目录。
+确认看到 `VITE ready` 和 `[dev-api] 开发 API 已启动` 输出。
 
-### 连接 Ollama 报错
+### Q: 面板显示 "openclaw.json 不存在"？
 
-Docker 容器内 `localhost` 是容器自己，不是宿主机。访问宿主机的 Ollama 需要：
+在容器内初始化 OpenClaw：
 
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
+```bash
+docker exec -it clawpanel openclaw init
 ```
 
-然后 baseUrl 填 `http://host.docker.internal:11434/v1`。
+### Q: Gateway 按钮不工作（Docker 环境）？
 
-### 内存占用
+容器内管理 Gateway 进程需要特殊权限。推荐方案：
 
-OpenClaw Gateway 本身约 50-100MB。如果同时运行 Ollama 等本地模型，建议 4GB+ 内存。
+1. **Compose 模式**：Gateway 作为独立容器运行，用 `docker compose restart gateway` 管理
+2. **Host 网络模式**：`--network host` 让 ClawPanel 直接管理宿主机进程
 
-### 时区问题
+### Q: 数据会丢失吗？
 
-```yaml
-services:
-  openclaw:
-    environment:
-      - TZ=Asia/Shanghai
-```
+只要正确配置了 Volume 挂载（`-v clawpanel-data:/root/.openclaw`），容器删除重建不会丢失数据。
 
----
+### Q: 与桌面版有什么区别？
 
-## 完整示例
-
-生产就绪的 docker-compose.yml：
-
-```yaml
-version: '3.8'
-
-services:
-  openclaw:
-    build: .
-    container_name: openclaw
-    restart: unless-stopped
-    ports:
-      - "18789:18789"
-    volumes:
-      - ./openclaw.json:/root/.openclaw/openclaw.json
-      - openclaw-data:/root/.openclaw
-    environment:
-      - NODE_ENV=production
-      - TZ=Asia/Shanghai
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:18789/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-volumes:
-  openclaw-data:
-```
+| 功能 | 桌面版 (Win/Mac) | Docker Web 版 |
+|------|-----------------|---------------|
+| 配置管理 | ✅ | ✅ |
+| Gateway 管理 | ✅ | ⚠️ 需 host 网络或 Compose |
+| 模型测试 | ✅ | ✅ |
+| 日志查看 | ✅ | ✅ |
+| 备份管理 | ✅ | ✅ |
+| Agent 记忆 | ✅ | ✅ |
+| ZIP 导出 | ✅ | ❌ |
+| 系统托盘 | ✅ | ❌ |
+| 自动更新 | ✅ | 手动重建镜像 |

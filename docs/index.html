@@ -727,7 +727,7 @@
     <div class="container-sm" style="position:relative;z-index:10">
       <div class="section-header">
         <h2 class="reveal section-title">服务器 <span class="gradient-text">部署指南</span></h2>
-        <p class="reveal section-desc">不用桌面环境，在 Linux 服务器或 Docker 上一键部署 OpenClaw Gateway</p>
+        <p class="reveal section-desc">没有桌面环境？在 Linux 或 Docker 上部署 ClawPanel Web 版，浏览器即可管理 OpenClaw</p>
       </div>
       <div class="deploy-grid">
         <!-- Linux -->
@@ -747,7 +747,7 @@
               <span class="terminal-title mono">bash</span>
             </div>
             <div class="terminal-body mono" style="padding:16px 20px;font-size:13px">
-              <div class="t-comment"># 一键安装 Node.js + OpenClaw + systemd 自启</div>
+              <div class="t-comment"># 一键部署 ClawPanel Web + OpenClaw + systemd 自启</div>
               <div class="t-cmd">curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawpanel/main/scripts/linux-deploy.sh | bash</div>
             </div>
           </div>
@@ -756,7 +756,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
               完整教程
             </a>
-            <span style="color:var(--text-muted);font-size:12px;line-height:32px">Node.js 安装 · 配置模型 · systemd/PM2 · Nginx 反代 · 防火墙</span>
+            <span style="color:var(--text-muted);font-size:12px;line-height:32px">Node.js · OpenClaw · systemd/PM2 · Nginx 反代 · 防火墙</span>
           </div>
         </div>
         <!-- Docker -->
@@ -767,7 +767,7 @@
             </div>
             <div>
               <h3 class="deploy-title">Docker 部署</h3>
-              <p class="deploy-desc">容器化隔离，支持 Compose 编排、Nginx 反代、Ollama 联动</p>
+              <p class="deploy-desc">容器化隔离，支持 Compose 编排、自定义镜像、Nginx 反代</p>
             </div>
           </div>
           <div class="terminal" style="margin:0">
@@ -776,10 +776,10 @@
               <span class="terminal-title mono">bash</span>
             </div>
             <div class="terminal-body mono" style="padding:16px 20px;font-size:13px">
-              <div class="t-comment"># 一条命令启动 Gateway</div>
-              <div class="t-cmd">docker run -d --name openclaw --restart unless-stopped \</div>
-              <div class="t-cmd" style="padding-left:1em">-p 18789:18789 -v openclaw-data:/root/.openclaw \</div>
-              <div class="t-cmd" style="padding-left:1em">node:22-slim sh -c "npm i -g @qingchencloud/openclaw-zh && openclaw gateway start"</div>
+              <div class="t-comment"># 一条命令启动 ClawPanel Web</div>
+              <div class="t-cmd">docker run -d --name clawpanel -p 1420:1420 \</div>
+              <div class="t-cmd" style="padding-left:1em">-v clawpanel-data:/root/.openclaw node:22-slim \</div>
+              <div class="t-cmd" style="padding-left:1em">sh -c "apt-get update && apt-get install -y git && ..."</div>
             </div>
           </div>
           <div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap">
@@ -787,14 +787,14 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
               完整教程
             </a>
-            <span style="color:var(--text-muted);font-size:12px;line-height:32px">Compose · Dockerfile · 模型配置 · Ollama · 多实例</span>
+            <span style="color:var(--text-muted);font-size:12px;line-height:32px">Compose · Dockerfile · Gateway 联动 · Nginx 反代</span>
           </div>
         </div>
       </div>
       <div class="reveal" style="text-align:center;margin-top:32px">
         <p style="color:var(--text-muted);font-size:14px">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-2px;opacity:0.7"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-          部署完成后，用 ClawPanel 连接 <code style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:13px">http://服务器IP:18789</code> 即可远程管理模型、Agent、日志等。手机端可用 ClawApp。
+          部署完成后，访问 <code style="background:var(--surface);padding:2px 8px;border-radius:4px;font-size:13px">http://服务器IP:1420</code> 即可通过浏览器管理 OpenClaw，功能与桌面版一致。
         </p>
       </div>
     </div>
@@ -813,7 +813,7 @@
           <div class="doc-icon" style="background:rgba(234,179,8,0.12);color:#eab308">🖥️</div>
           <div>
             <h3>Linux 部署指南</h3>
-            <p>从零开始在 Linux 服务器上部署 OpenClaw Gateway，一键脚本 + 手动安装两种方式</p>
+            <p>在 Linux 服务器上部署 ClawPanel Web 版，通过浏览器远程管理 OpenClaw</p>
             <div class="doc-tags">
               <span class="doc-tag">一键部署</span>
               <span class="doc-tag">systemd</span>
@@ -826,12 +826,12 @@
           <div class="doc-icon" style="background:rgba(34,211,238,0.12);color:#22d3ee">🐳</div>
           <div>
             <h3>Docker 部署指南</h3>
-            <p>容器化部署 OpenClaw，支持 Compose 编排、自定义镜像、Ollama 联动、多实例</p>
+            <p>用 Docker 部署 ClawPanel Web 版，支持 Compose 编排、自定义镜像、Gateway 联动</p>
             <div class="doc-tags">
               <span class="doc-tag">Docker Compose</span>
               <span class="doc-tag">Dockerfile</span>
-              <span class="doc-tag">Ollama</span>
-              <span class="doc-tag">反向代理</span>
+              <span class="doc-tag">Gateway 联动</span>
+              <span class="doc-tag">Nginx 反代</span>
             </div>
           </div>
         </div>
