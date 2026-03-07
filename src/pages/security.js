@@ -3,6 +3,7 @@
  * 支持 Web 部署模式和 Tauri 桌面端
  */
 import { toast } from '../components/toast.js'
+import { statusIcon } from '../lib/icons.js'
 
 const isTauri = !!window.__TAURI_INTERNALS__
 let _tauriApi = null
@@ -114,7 +115,7 @@ function renderContent(container, status) {
   let html = ''
 
   // 当前状态
-  const stateIcon = status.hasPassword ? '✅' : (status.ignoreRisk ? '⚠️' : '⚠️')
+  const stateIcon = status.hasPassword ? statusIcon('ok', 20) : statusIcon('warn', 20)
   const stateText = status.hasPassword
     ? (status.mustChangePassword ? '使用默认密码（需修改）' : '已设置自定义密码')
     : (status.ignoreRisk ? '无视风险模式（无密码）' : '未设置密码')

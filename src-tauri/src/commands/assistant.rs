@@ -357,6 +357,118 @@ async fn get_port_process(port: u16) -> String {
     }
 }
 
+/// 联网搜索（DuckDuckGo HTML）
+#[tauri::command]
+pub async fn assistant_web_search(
+    query: String,
+    max_results: Option<usize>,
+) -> Result<String, String> {
+    let max = max_results.unwrap_or(5);
+    let url = format!(
+        "https://html.duckduckgo.com/html/?q={}",
+        urlencoding::encode(&query)
+    );
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let html = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("搜索请求失败: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("读取搜索结果失败: {e}"))?;
+
+    // 解析搜索结果
+    let mut results = Vec::new();
+    let re_result = regex::Regex::new(
+        r#"class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)</a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)</a>"#
+    ).unwrap();
+
+    let re_strip_tags = regex::Regex::new(r"<[^>]+>").unwrap();
+
+    for cap in re_result.captures_iter(&html) {
+        if results.len() >= max {
+            break;
+        }
+        let raw_url = &cap[1];
+        let title = re_strip_tags.replace_all(&cap[2], "").trim().to_string();
+        let snippet = re_strip_tags.replace_all(&cap[3], "").trim().to_string();
+
+        // 解码 DuckDuckGo 的重定向 URL
+        let final_url = if let Some(pos) = raw_url.find("uddg=") {
+            let encoded = &raw_url[pos + 5..];
+            let end = encoded.find('&').unwrap_or(encoded.len());
+            urlencoding::decode(&encoded[..end])
+                .unwrap_or_else(|_| encoded[..end].into())
+                .to_string()
+        } else {
+            raw_url.to_string()
+        };
+
+        if !title.is_empty() && !final_url.is_empty() {
+            results.push((title, final_url, snippet));
+        }
+    }
+
+    if results.is_empty() {
+        return Ok(format!("搜索「{}」未找到相关结果。", query));
+    }
+
+    let mut output = format!("搜索「{}」找到 {} 条结果：\n\n", query, results.len());
+    for (i, (title, url, snippet)) in results.iter().enumerate() {
+        output.push_str(&format!(
+            "{}. **{}**\n   {}\n   {}\n\n",
+            i + 1,
+            title,
+            url,
+            snippet
+        ));
+    }
+    Ok(output)
+}
+
+/// 抓取 URL 内容（通过 Jina Reader API）
+#[tauri::command]
+pub async fn assistant_fetch_url(url: String) -> Result<String, String> {
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL 必须以 http:// 或 https:// 开头".into());
+    }
+
+    let jina_url = format!("https://r.jina.ai/{}", url);
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
+
+    let content = client
+        .get(&jina_url)
+        .header("Accept", "text/plain")
+        .send()
+        .await
+        .map_err(|e| format!("抓取失败: {e}"))?
+        .text()
+        .await
+        .map_err(|e| format!("读取内容失败: {e}"))?;
+
+    if content.len() > 100_000 {
+        Ok(format!(
+            "{}\n\n[内容已截断，超过 100KB 限制]",
+            &content[..100_000]
+        ))
+    } else if content.is_empty() {
+        Ok("（页面内容为空）".into())
+    } else {
+        Ok(content)
+    }
+}
+
 /// 列出目录内容
 #[tauri::command]
 pub async fn assistant_list_dir(path: String) -> Result<String, String> {

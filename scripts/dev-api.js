@@ -5,8 +5,10 @@
  */
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { homedir, networkInterfaces } from 'os'
 import { execSync, spawn } from 'child_process'
+import net from 'net'
 import crypto from 'crypto'
 
 const OPENCLAW_DIR = path.join(homedir(), '.openclaw')
@@ -219,13 +221,14 @@ function patchGatewayOrigins() {
   for (const ip of getLocalIps()) {
     origins.push(`http://${ip}:1420`)
   }
-  const newOrigins = [...new Set(origins)]
   const existing = config?.gateway?.controlUi?.allowedOrigins || []
+  // 合并：保留用户已有的 origins，只追加 ClawPanel 需要的
+  const merged = [...new Set([...existing, ...origins])]
   // 幂等：已包含所有需要的 origin 时跳过写入
-  if (newOrigins.every(o => existing.includes(o))) return false
+  if (origins.every(o => existing.includes(o))) return false
   if (!config.gateway) config.gateway = {}
   if (!config.gateway.controlUi) config.gateway.controlUi = {}
-  config.gateway.controlUi.allowedOrigins = newOrigins
+  config.gateway.controlUi.allowedOrigins = merged
   fs.copyFileSync(CONFIG_PATH, CONFIG_PATH + '.bak')
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
   return true
@@ -305,47 +308,50 @@ function winStartGateway() {
   const timestamp = new Date().toISOString()
   fs.appendFileSync(logPath, `\n[${timestamp}] [ClawPanel] Starting Gateway on Windows...\n`)
 
-  const child = spawn('openclaw', ['gateway'], {
+  // 用 cmd.exe /c 启动，不用 shell: true（避免额外 cmd.exe 进程链导致终端闪烁）
+  const child = spawn('cmd.exe', ['/c', 'openclaw', 'gateway'], {
     detached: true,
     stdio: ['ignore', out, err],
-    shell: true,
     windowsHide: true,
     cwd: homedir(),
   })
   child.unref()
 }
 
-function winStopGateway() {
-  const { running, pid } = winCheckGateway()
-  if (!running || !pid) throw new Error('Gateway 未运行')
+async function winStopGateway() {
+  const { running } = await winCheckGateway()
+  if (!running) throw new Error('Gateway 未运行')
   try {
-    execSync(`taskkill /F /PID ${pid} /T`, { timeout: 5000, windowsHide: true })
-  } catch (e) {
-    throw new Error('停止失败: ' + (e.message || e))
+    execSync('taskkill /F /IM node.exe /FI "WINDOWTITLE eq openclaw*"', { timeout: 5000, windowsHide: true })
+  } catch {
+    try {
+      execSync('taskkill /F /IM node.exe', { timeout: 5000, windowsHide: true })
+    } catch (e) {
+      throw new Error('停止失败: ' + (e.message || e))
+    }
   }
 }
 
+// TCP 探测 Gateway 端口（纯异步，零子进程，不会闪终端）
 function winCheckGateway() {
   const port = readGatewayPort()
-  try {
-    // 用 netstat 精确查找监听指定端口的进程 PID
-    const out = execSync(`netstat -ano | findstr ":${port}" | findstr "LISTENING"`, { timeout: 3000, windowsHide: true }).toString().trim()
-    if (!out) return { running: false, pid: null }
-    // 提取 PID（最后一列）
-    const parts = out.split('\n')[0].trim().split(/\s+/)
-    const pid = parseInt(parts[parts.length - 1]) || null
-    if (!pid) return { running: false, pid: null }
-    // 验证进程是否为 node/openclaw（排除其他程序碰巧占用同端口）
-    try {
-      const taskOut = execSync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, { timeout: 3000, windowsHide: true }).toString().trim()
-      const isGateway = /node|openclaw/i.test(taskOut)
-      return { running: isGateway, pid: isGateway ? pid : null }
-    } catch {
-      return { running: true, pid }
-    }
-  } catch {
-    return { running: false, pid: null }
-  }
+  return new Promise(resolve => {
+    const sock = new net.Socket()
+    sock.setTimeout(300)
+    sock.once('connect', () => {
+      sock.destroy()
+      resolve({ running: true, pid: null })
+    })
+    sock.once('error', () => {
+      sock.destroy()
+      resolve({ running: false, pid: null })
+    })
+    sock.once('timeout', () => {
+      sock.destroy()
+      resolve({ running: false, pid: null })
+    })
+    sock.connect(port, '127.0.0.1')
+  })
 }
 
 function readGatewayPort() {
@@ -521,9 +527,9 @@ const handlers = {
   },
 
   // 服务管理
-  get_services_status() {
+  async get_services_status() {
     const label = 'ai.openclaw.gateway'
-    const { running, pid } = isMac ? macCheckService(label) : isLinux ? linuxCheckGateway() : winCheckGateway()
+    const { running, pid } = isMac ? macCheckService(label) : isLinux ? linuxCheckGateway() : await winCheckGateway()
 
     let cliInstalled = false
     if (isMac) {
@@ -545,10 +551,10 @@ const handlers = {
     return true
   },
 
-  stop_service({ label }) {
+  async stop_service({ label }) {
     if (isMac) { macStopService(label); return true }
     if (isLinux) { linuxStopGateway(); return true }
-    winStopGateway()
+    await winStopGateway()
     return true
   },
 
@@ -564,9 +570,9 @@ const handlers = {
       linuxStartGateway()
       return true
     }
-    try { winStopGateway() } catch {}
+    try { await winStopGateway() } catch {}
     for (let i = 0; i < 10; i++) {
-      const { running } = winCheckGateway()
+      const { running } = await winCheckGateway()
       if (!running) break
       await new Promise(r => setTimeout(r, 500))
     }
@@ -630,9 +636,16 @@ const handlers = {
     return { current, latest: null, update_available: false, source: 'chinese' }
   },
 
+  // 清理 base URL：去掉尾部斜杠和已知端点路径，防止路径重复
+  _normalizeBaseUrl(raw) {
+    let base = raw.replace(/\/+$/, '')
+    base = base.replace(/\/(chat\/completions|completions|responses|messages|models)\/?$/, '')
+    return base.replace(/\/+$/, '')
+  },
+
   // 模型测试
   async test_model({ baseUrl, apiKey, modelId }) {
-    const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`
+    const url = `${this._normalizeBaseUrl(baseUrl)}/chat/completions`
     const body = JSON.stringify({
       model: modelId,
       messages: [{ role: 'user', content: 'Hi' }],
@@ -664,7 +677,7 @@ const handlers = {
   },
 
   async list_remote_models({ baseUrl, apiKey }) {
-    const url = `${baseUrl.replace(/\/+$/, '')}/models`
+    const url = `${this._normalizeBaseUrl(baseUrl)}/models`
     const headers = {}
     if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`
     const controller = new AbortController()
@@ -853,7 +866,7 @@ const handlers = {
 
   upgrade_openclaw({ source = 'chinese' } = {}) {
     const OPENCLAW_DIR = path.join(homedir(), '.openclaw')
-    const pkg = source === 'official' ? '@anthropic-ai/claw' : '@qingchencloud/openclaw-zh'
+    const pkg = source === 'official' ? 'openclaw' : '@qingchencloud/openclaw-zh'
     const npmBin = isWindows ? 'npm.cmd' : 'npm'
     try {
       const out = execSync(`${npmBin} install ${pkg}@latest --prefix "${OPENCLAW_DIR}" 2>&1`, { timeout: 120000, windowsHide: true }).toString()
@@ -916,46 +929,70 @@ const handlers = {
 
   // 扩展工具
   get_cftunnel_status() {
-    if (!isMac) return { installed: false }
+    // 优先使用 cftunnel CLI（跨平台）
+    const bin = isWindows ? 'cftunnel.exe' : 'cftunnel'
     try {
-      const ver = execSync('cftunnel --version 2>&1').toString().trim()
-      let running = false, pid = null
-      try {
-        const pgrepOut = execSync('pgrep -f cloudflared 2>/dev/null').toString().trim()
-        if (pgrepOut) { running = true; pid = parseInt(pgrepOut.split('\n')[0]) || null }
-      } catch {}
-      // 读取 config.yml 获取 tunnel_name 和 routes
-      let tunnel_name = '', routes = []
-      const cfgPath = path.join(homedir(), '.cftunnel/config.yml')
-      if (fs.existsSync(cfgPath)) {
-        const cfgText = fs.readFileSync(cfgPath, 'utf8')
-        const nameMatch = cfgText.match(/^\s+name:\s*(.+)$/m)
-        if (nameMatch) tunnel_name = nameMatch[1].trim()
-        // 解析 routes 数组
-        const routeBlocks = cfgText.split(/^\s+-\s+name:/m).slice(1)
-        routes = routeBlocks.map(block => {
-          const lines = ('name:' + block).split('\n')
-          const get = key => { const l = lines.find(x => x.trim().startsWith(key + ':')); return l ? l.split(':').slice(1).join(':').trim() : '' }
-          return { name: get('name'), domain: get('hostname'), service: get('service') }
-        }).filter(r => r.name)
-      }
-      return { installed: true, version: ver, running, pid, tunnel_name, routes }
+      execSync(`${bin} --version`, { timeout: 3000, windowsHide: true, stdio: 'pipe' })
     } catch {
       return { installed: false }
     }
+    // 已安装，获取状态
+    let running = false, pid = null, tunnel_name = ''
+    try {
+      const statusOut = execSync(`${bin} status 2>&1`, { timeout: 5000, windowsHide: true }).toString()
+      if (statusOut.includes('运行中')) running = true
+      const pidMatch = statusOut.match(/PID[：:]\s*(\d+)/)
+      if (pidMatch) pid = parseInt(pidMatch[1])
+      const nameMatch = statusOut.match(/隧道[：:]\s*([^\s(]+)/)
+      if (nameMatch) tunnel_name = nameMatch[1]
+    } catch {}
+    // 补充进程检测
+    if (!running) {
+      try {
+        if (isWindows) {
+          const out = execSync('tasklist /FI "IMAGENAME eq cftunnel.exe" /FO CSV /NH 2>nul', { timeout: 3000, windowsHide: true }).toString()
+          if (out.includes('cftunnel.exe')) running = true
+        } else {
+          const out = execSync('pgrep -f cftunnel 2>/dev/null', { timeout: 3000 }).toString().trim()
+          if (out) { running = true; pid = pid || parseInt(out.split('\n')[0]) || null }
+        }
+      } catch {}
+    }
+    // 获取路由列表
+    let routes = []
+    try {
+      const listOut = execSync(`${bin} list 2>&1`, { timeout: 5000, windowsHide: true }).toString()
+      const lines = listOut.split('\n').filter(l => l.trim() && !l.includes('---') && !l.toLowerCase().includes('name'))
+      routes = lines.map(l => {
+        const parts = l.split(/\s{2,}|\t/).map(s => s.trim()).filter(Boolean)
+        return parts.length >= 3 ? { name: parts[0], domain: parts[1], service: parts[2] } : null
+      }).filter(Boolean)
+    } catch {}
+    return { installed: true, running, pid, tunnel_name, routes }
   },
 
   get_clawapp_status() {
-    if (!isMac) return { installed: false, running: false, pid: null, port: 3210, url: 'http://localhost:3210' }
-    // 检测 ClawApp 进程是否运行（Node 服务监听 3210 端口）
-    let running = false, pid = null, port = 3210
+    const port = 3210
+    let running = false, pid = null
+    // 检测端口是否在监听
     try {
-      const lsofOut = execSync('lsof -i :3210 -t 2>/dev/null').toString().trim()
-      if (lsofOut) { running = true; pid = parseInt(lsofOut.split('\n')[0]) || null }
+      if (isWindows) {
+        const out = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { timeout: 3000, windowsHide: true }).toString().trim()
+        if (out) {
+          running = true
+          const parts = out.split(/\s+/)
+          pid = parseInt(parts[parts.length - 1]) || null
+        }
+      } else {
+        const out = execSync(`lsof -i :${port} -t 2>/dev/null`, { timeout: 3000 }).toString().trim()
+        if (out) { running = true; pid = parseInt(out.split('\n')[0]) || null }
+      }
     } catch {}
-    // 检测是否安装
-    const clawappDir = path.join(homedir(), 'Desktop/clawapp')
-    const installed = fs.existsSync(clawappDir)
+    // 检测是否安装（多个可能路径）
+    const candidates = isWindows
+      ? [path.join(homedir(), 'Desktop\\clawapp'), path.join(homedir(), 'clawapp')]
+      : [path.join(homedir(), 'Desktop/clawapp'), path.join(homedir(), 'clawapp'), '/opt/clawapp']
+    const installed = candidates.some(p => fs.existsSync(p))
     return { installed, running, pid, port, url: `http://localhost:${port}` }
   },
 
@@ -1062,6 +1099,398 @@ const handlers = {
       if (fs.existsSync(filepath)) fs.unlinkSync(filepath)
     }
     return null
+  },
+
+  // === AI 助手工具（Web 模式真实执行） ===
+
+  assistant_exec({ command, cwd }) {
+    if (!command) throw new Error('命令不能为空')
+    // 安全限制：禁止危险命令
+    const dangerous = ['rm -rf /', 'mkfs', 'dd if=', ':(){', 'format ', 'del /f /s /q C:']
+    if (dangerous.some(d => command.includes(d))) throw new Error('危险命令已被拦截')
+    const opts = { timeout: 30000, maxBuffer: 1024 * 1024, windowsHide: true }
+    if (cwd) opts.cwd = cwd
+    try {
+      const output = execSync(command, opts).toString()
+      return output || '（命令已执行，无输出）'
+    } catch (e) {
+      const stderr = e.stderr?.toString() || ''
+      const stdout = e.stdout?.toString() || ''
+      return `退出码: ${e.status || 1}\n${stdout}${stderr ? '\n[stderr] ' + stderr : ''}`
+    }
+  },
+
+  assistant_read_file({ path: filePath }) {
+    if (!filePath) throw new Error('路径不能为空')
+    const expanded = filePath.startsWith('~/') ? path.join(homedir(), filePath.slice(2)) : filePath
+    if (!fs.existsSync(expanded)) throw new Error(`文件不存在: ${filePath}`)
+    const stat = fs.statSync(expanded)
+    if (stat.size > 1024 * 1024) throw new Error(`文件过大 (${(stat.size / 1024 / 1024).toFixed(1)}MB)，最大 1MB`)
+    return fs.readFileSync(expanded, 'utf8')
+  },
+
+  assistant_write_file({ path: filePath, content }) {
+    if (!filePath) throw new Error('路径不能为空')
+    const expanded = filePath.startsWith('~/') ? path.join(homedir(), filePath.slice(2)) : filePath
+    const dir = path.dirname(expanded)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(expanded, content || '')
+    return `已写入 ${filePath} (${Buffer.byteLength(content || '', 'utf8')} 字节)`
+  },
+
+  assistant_list_dir({ path: dirPath }) {
+    if (!dirPath) throw new Error('路径不能为空')
+    const expanded = dirPath.startsWith('~/') ? path.join(homedir(), dirPath.slice(2)) : dirPath
+    if (!fs.existsSync(expanded)) throw new Error(`目录不存在: ${dirPath}`)
+    const entries = fs.readdirSync(expanded, { withFileTypes: true })
+    return entries.map(e => {
+      if (e.isDirectory()) return `[DIR]  ${e.name}/`
+      try {
+        const stat = fs.statSync(path.join(expanded, e.name))
+        const size = stat.size < 1024 ? `${stat.size} B` : stat.size < 1048576 ? `${(stat.size / 1024).toFixed(1)} KB` : `${(stat.size / 1048576).toFixed(1)} MB`
+        return `[FILE] ${e.name} (${size})`
+      } catch {
+        return `[FILE] ${e.name}`
+      }
+    }).join('\n') || '（空目录）'
+  },
+
+  assistant_system_info() {
+    const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux'
+    const arch = process.arch
+    const home = homedir()
+    const hostname = os.hostname()
+    const shell = process.platform === 'win32' ? 'powershell / cmd' : (process.env.SHELL || '/bin/bash')
+    const sep = path.sep
+    const totalMem = (os.totalmem() / 1024 / 1024 / 1024).toFixed(1)
+    const freeMem = (os.freemem() / 1024 / 1024 / 1024).toFixed(1)
+    const cpus = os.cpus()
+    const cpuModel = cpus[0]?.model || '未知'
+    const lines = [
+      `OS: ${platform}`,
+      `Arch: ${arch}`,
+      `Home: ${home}`,
+      `Hostname: ${hostname}`,
+      `Shell: ${shell}`,
+      `Path separator: ${sep}`,
+      `CPU: ${cpuModel} (${cpus.length} 核)`,
+      `Memory: ${freeMem}GB free / ${totalMem}GB total`,
+    ]
+    // Node.js 版本
+    try {
+      const nodeVer = execSync('node --version 2>&1', { windowsHide: true }).toString().trim()
+      lines.push(`Node.js: ${nodeVer}`)
+    } catch {}
+    return lines.join('\n')
+  },
+
+  assistant_list_processes({ filter }) {
+    try {
+      if (isWindows) {
+        const cmd = filter
+          ? `tasklist /FI "IMAGENAME eq ${filter}*" /FO CSV /NH 2>nul`
+          : 'tasklist /FO CSV /NH 2>nul | more +1'
+        const output = execSync(cmd, { timeout: 5000, windowsHide: true }).toString().trim()
+        return output || '（无匹配进程）'
+      } else {
+        const cmd = filter
+          ? `ps aux | head -1 && ps aux | grep -i "${filter}" | grep -v grep`
+          : 'ps aux | head -20'
+        const output = execSync(cmd, { timeout: 5000 }).toString().trim()
+        return output || '（无匹配进程）'
+      }
+    } catch (e) {
+      return e.stdout?.toString() || '（无匹配进程）'
+    }
+  },
+
+  assistant_check_port({ port }) {
+    if (!port) throw new Error('端口号不能为空')
+    try {
+      if (isWindows) {
+        const output = execSync(`netstat -ano | findstr :${port}`, { timeout: 5000, windowsHide: true }).toString().trim()
+        return output ? `端口 ${port} 已被占用（正在监听）\n${output}` : `端口 ${port} 未被占用（空闲）`
+      } else {
+        const output = execSync(`ss -tlnp 'sport = :${port}' 2>/dev/null || lsof -i :${port} 2>/dev/null`, { timeout: 5000 }).toString().trim()
+        // ss 输出第一行是表头，需要检查是否有第二行
+        const lines = output.split('\n').filter(l => l.trim())
+        if (lines.length > 1 || output.includes(`:${port}`)) {
+          return `端口 ${port} 已被占用（正在监听）\n${output}`
+        }
+        return `端口 ${port} 未被占用（空闲）`
+      }
+    } catch {
+      return `端口 ${port} 未被占用（空闲）`
+    }
+  },
+
+  // === AI 助手联网搜索工具 ===
+
+  async assistant_web_search({ query, max_results = 5 }) {
+    if (!query) throw new Error('搜索关键词不能为空')
+    try {
+      // 使用 DuckDuckGo HTML 搜索
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+      const https = require('https')
+      const http = require('http')
+      const fetchModule = url.startsWith('https') ? https : http
+      const html = await new Promise((resolve, reject) => {
+        const req = fetchModule.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, timeout: 10000 }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            // 跟随重定向
+            const rUrl = res.headers.location.startsWith('http') ? res.headers.location : `https://html.duckduckgo.com${res.headers.location}`
+            fetchModule.get(rUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 10000 }, (res2) => {
+              let d = ''; res2.on('data', c => d += c); res2.on('end', () => resolve(d))
+            }).on('error', reject)
+            return
+          }
+          let data = ''; res.on('data', c => data += c); res.on('end', () => resolve(data))
+        })
+        req.on('error', reject)
+        req.on('timeout', () => { req.destroy(); reject(new Error('搜索超时')) })
+      })
+
+      // 解析搜索结果
+      const results = []
+      const regex = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi
+      let match
+      while ((match = regex.exec(html)) !== null && results.length < max_results) {
+        const rawUrl = match[1]
+        const title = match[2].replace(/<[^>]+>/g, '').trim()
+        const snippet = match[3].replace(/<[^>]+>/g, '').trim()
+        // DuckDuckGo 的 URL 需要解码
+        let finalUrl = rawUrl
+        try {
+          const uddg = new URL(rawUrl, 'https://duckduckgo.com').searchParams.get('uddg')
+          if (uddg) finalUrl = decodeURIComponent(uddg)
+        } catch {}
+        if (title && finalUrl) {
+          results.push({ title, url: finalUrl, snippet })
+        }
+      }
+
+      if (results.length === 0) {
+        return `搜索「${query}」未找到相关结果。`
+      }
+
+      let output = `搜索「${query}」找到 ${results.length} 条结果：\n\n`
+      results.forEach((r, i) => {
+        output += `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.snippet}\n\n`
+      })
+      return output
+    } catch (err) {
+      return `搜索失败: ${err.message}。请检查网络连接。`
+    }
+  },
+
+  async assistant_fetch_url({ url }) {
+    if (!url) throw new Error('URL 不能为空')
+    if (!url.startsWith('http://') && !url.startsWith('https://')) throw new Error('URL 必须以 http:// 或 https:// 开头')
+
+    try {
+      // 优先使用 Jina Reader API（免费，返回 Markdown）
+      const jinaUrl = 'https://r.jina.ai/' + url
+      const https = require('https')
+      const content = await new Promise((resolve, reject) => {
+        const req = https.get(jinaUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/plain' },
+          timeout: 15000,
+        }, (res) => {
+          let data = ''
+          res.on('data', c => {
+            data += c
+            if (data.length > 100000) { req.destroy(); resolve(data.slice(0, 100000) + '\n\n[内容已截断，超过 100KB 限制]') }
+          })
+          res.on('end', () => resolve(data))
+        })
+        req.on('error', reject)
+        req.on('timeout', () => { req.destroy(); reject(new Error('抓取超时')) })
+      })
+
+      return content || '（页面内容为空）'
+    } catch (err) {
+      return `抓取失败: ${err.message}`
+    }
+  },
+
+  // === 面板配置（Web 模式） ===
+
+  read_panel_config() {
+    return readPanelConfig()
+  },
+
+  write_panel_config({ config }) {
+    if (!fs.existsSync(OPENCLAW_DIR)) fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
+    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(config, null, 2))
+    invalidateConfigCache()
+    return true
+  },
+
+  // === 扩展工具操作（Web 模式） ===
+
+  cftunnel_action({ action }) {
+    const bin = isWindows ? 'cftunnel.exe' : 'cftunnel'
+    const cmd = action === 'up' ? `${bin} up -d` : `${bin} down`
+    try {
+      execSync(cmd, { timeout: 15000, windowsHide: true }).toString()
+      return true
+    } catch (e) {
+      throw new Error(`cftunnel ${action} 失败: ${e.stderr?.toString() || e.message}`)
+    }
+  },
+
+  get_cftunnel_logs({ lines = 20 }) {
+    const bin = isWindows ? 'cftunnel.exe' : 'cftunnel'
+    // 优先使用 cftunnel log 命令
+    try {
+      return execSync(`${bin} log -n ${lines} 2>&1`, { timeout: 5000, windowsHide: true }).toString()
+    } catch {}
+    // 回退：直接读日志文件
+    const logPath = path.join(homedir(), '.cftunnel', 'cftunnel.log')
+    if (!fs.existsSync(logPath)) return '暂无日志'
+    try {
+      if (!isWindows) {
+        return execSync(`tail -${lines} "${logPath}" 2>&1`, { timeout: 3000 }).toString()
+      }
+      const content = fs.readFileSync(logPath, 'utf8')
+      return content.split('\n').slice(-lines).join('\n')
+    } catch {
+      const content = fs.readFileSync(logPath, 'utf8')
+      return content.split('\n').slice(-lines).join('\n')
+    }
+  },
+
+  install_cftunnel() {
+    try {
+      let out
+      if (isWindows) {
+        out = execSync('powershell -NoProfile -ExecutionPolicy Bypass -Command "$tmp = Join-Path $env:TEMP install-cftunnel.ps1; Invoke-WebRequest -Uri https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.ps1 -OutFile $tmp -UseBasicParsing; & $tmp; Remove-Item $tmp -ErrorAction SilentlyContinue"', { timeout: 120000, windowsHide: true }).toString()
+      } else {
+        out = execSync('curl -fsSL https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.sh | bash', { timeout: 120000 }).toString()
+      }
+      return `安装完成\n${out.slice(-500)}`
+    } catch (e) {
+      throw new Error('安装失败: ' + (e.stderr?.toString() || e.message).slice(-500))
+    }
+  },
+
+  install_clawapp() {
+    try {
+      let out
+      if (isWindows) {
+        out = execSync('powershell -NoProfile -ExecutionPolicy Bypass -Command "$tmp = Join-Path $env:TEMP install-clawapp.ps1; Invoke-WebRequest -Uri https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.ps1 -OutFile $tmp -UseBasicParsing; & $tmp -Auto; Remove-Item $tmp -ErrorAction SilentlyContinue"', { timeout: 300000, windowsHide: true }).toString()
+      } else {
+        out = execSync('curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.sh | bash', { timeout: 300000 }).toString()
+      }
+      return `安装完成\n${out.slice(-500)}`
+    } catch (e) {
+      throw new Error('安装失败: ' + (e.stderr?.toString() || e.message).slice(-500))
+    }
+  },
+
+  // === Agent 管理（Web 模式） ===
+
+  add_agent({ name, model, workspace }) {
+    if (!name) throw new Error('Agent 名称不能为空')
+    const agentsDir = path.join(OPENCLAW_DIR, 'agents')
+    const agentDir = path.join(agentsDir, name)
+    if (fs.existsSync(agentDir)) throw new Error(`Agent "${name}" 已存在`)
+    fs.mkdirSync(agentDir, { recursive: true })
+    const meta = { id: name, model: model || null, workspace: workspace || null }
+    fs.writeFileSync(path.join(agentDir, 'agent.json'), JSON.stringify(meta, null, 2))
+    return true
+  },
+
+  delete_agent({ id }) {
+    if (!id || id === 'main') throw new Error('不能删除默认 Agent')
+    const agentDir = path.join(OPENCLAW_DIR, 'agents', id)
+    if (!fs.existsSync(agentDir)) throw new Error(`Agent "${id}" 不存在`)
+    fs.rmSync(agentDir, { recursive: true, force: true })
+    return true
+  },
+
+  update_agent_identity({ id, name, emoji }) {
+    if (!id) throw new Error('Agent ID 不能为空')
+    // 写入 openclaw.json 的 agents 配置
+    if (!fs.existsSync(CONFIG_PATH)) throw new Error('openclaw.json 不存在')
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+    if (!config.agents) config.agents = {}
+    if (!config.agents.profiles) config.agents.profiles = {}
+    if (!config.agents.profiles[id]) config.agents.profiles[id] = {}
+    if (name) config.agents.profiles[id].identityName = name
+    if (emoji) config.agents.profiles[id].emoji = emoji
+    fs.copyFileSync(CONFIG_PATH, CONFIG_PATH + '.bak')
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+    return true
+  },
+
+  update_agent_model({ id, model }) {
+    if (!id) throw new Error('Agent ID 不能为空')
+    if (!fs.existsSync(CONFIG_PATH)) throw new Error('openclaw.json 不存在')
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
+    if (!config.agents) config.agents = {}
+    if (!config.agents.profiles) config.agents.profiles = {}
+    if (!config.agents.profiles[id]) config.agents.profiles[id] = {}
+    config.agents.profiles[id].model = model || null
+    fs.copyFileSync(CONFIG_PATH, CONFIG_PATH + '.bak')
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
+    return true
+  },
+
+  backup_agent({ id }) {
+    if (!id) throw new Error('Agent ID 不能为空')
+    const suffix = id !== 'main' ? `/agents/${id}` : ''
+    const wsDir = path.join(OPENCLAW_DIR, 'workspace' + suffix)
+    if (!fs.existsSync(wsDir)) return '工作区为空，无需备份'
+    if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true })
+    const now = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    const name = `agent-${id}-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}.tar`
+    try {
+      execSync(`tar -cf "${path.join(BACKUPS_DIR, name)}" -C "${wsDir}" .`, { timeout: 30000 })
+      return `已备份: ${name}`
+    } catch (e) {
+      throw new Error('备份失败: ' + (e.message || e))
+    }
+  },
+
+  // === 初始设置工具（Web 模式） ===
+
+  check_node_at_path({ nodeDir }) {
+    const nodeBin = path.join(nodeDir, isWindows ? 'node.exe' : 'node')
+    if (!fs.existsSync(nodeBin)) throw new Error(`未在 ${nodeDir} 找到 node`)
+    try {
+      const ver = execSync(`"${nodeBin}" --version 2>&1`, { timeout: 5000, windowsHide: true }).toString().trim()
+      return { installed: true, version: ver, path: nodeBin }
+    } catch (e) {
+      throw new Error('node 检测失败: ' + e.message)
+    }
+  },
+
+  scan_node_paths() {
+    const results = []
+    const candidates = isWindows
+      ? ['C:\\Program Files\\nodejs', 'C:\\Program Files (x86)\\nodejs']
+      : ['/usr/local/bin', '/usr/bin', '/opt/homebrew/bin', path.join(homedir(), '.nvm/versions/node'), path.join(homedir(), '.volta/bin')]
+    for (const p of candidates) {
+      const nodeBin = path.join(p, isWindows ? 'node.exe' : 'node')
+      if (fs.existsSync(nodeBin)) {
+        try {
+          const ver = execSync(`"${nodeBin}" --version 2>&1`, { timeout: 5000, windowsHide: true }).toString().trim()
+          results.push({ path: p, version: ver })
+        } catch {}
+      }
+    }
+    return results
+  },
+
+  save_custom_node_path({ nodeDir }) {
+    const cfg = readPanelConfig()
+    cfg.customNodePath = nodeDir
+    if (!fs.existsSync(OPENCLAW_DIR)) fs.mkdirSync(OPENCLAW_DIR, { recursive: true })
+    fs.writeFileSync(PANEL_CONFIG_PATH, JSON.stringify(cfg, null, 2))
+    invalidateConfigCache()
+    return true
   },
 
   // === 访问密码认证 ===

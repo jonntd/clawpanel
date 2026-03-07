@@ -5,6 +5,25 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.0] - 2026-03-07
+
+### 新功能 (Features)
+
+- **公益 AI 接口计划** — 内置免费 AI 接口（gpt.qt.cool），GPT-5 全系列模型一键接入，Token 费用由项目组承担
+- **Agent 灵魂借尸还魂** — AI 助手可从 OpenClaw Agent 加载完整灵魂（SOUL / IDENTITY / USER / AGENTS / TOOLS），继承人格与记忆
+- **知识库注入** — 自定义 Markdown 知识注入 AI 助手，对话时自动激活
+- **AI 工具权限管控** — 工具调用权限三档可调（完整 / 受限 / 禁用），危险操作二次确认
+- **全局 AI 浮动按钮** — 任意页面错误自动捕获，一键跳转 AI 助手分析诊断
+- **一键部署脚本** — `deploy.sh` 支持 curl/wget 双模式，适配 Docker / WSL / Linux 环境
+
+### 改进 (Improvements)
+
+- **安装失败诊断增强** — Rust 后端收集 stderr 最后 15 行，JS 端延迟 150ms 确保完整日志捕获；新增 ENOENT(-4058)、权限、网络等详细诊断
+- **UI 图标统一** — 全面替换 emoji 为 SVG 图标组件（assistant / chat-debug / about / services 等页面）
+- **模型配置增强** — 公益接口 Banner + 一键添加全部模型，批量连通性测试
+- **官网全面改版** — Hero 换为 AI 助手、Showcase 8 行 + Gallery 6 格重新编排、全部文案重写、新增活动板块和抖音社群
+- **开发模式增强** — dev-api.js Mock API 大幅扩展，支持 AI 助手全流程调试
+
 ## [0.5.6] - 2026-03-06
 
 ### 安全修复 (Security)

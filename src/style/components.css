@@ -140,6 +140,12 @@
   font-size: var(--font-size-xs);
 }
 
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+}
+
 /* 表单 */
 .form-group {
   margin-bottom: var(--space-lg);
@@ -275,7 +281,15 @@ mark {
   padding: var(--space-xl);
   min-width: 360px;
   max-width: 500px;
+  max-height: calc(100vh - 60px);
+  display: flex;
+  flex-direction: column;
   box-shadow: var(--shadow-lg);
+}
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .modal-title {

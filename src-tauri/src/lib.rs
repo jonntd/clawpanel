@@ -89,6 +89,8 @@ pub fn run() {
             assistant::assistant_system_info,
             assistant::assistant_list_processes,
             assistant::assistant_check_port,
+            assistant::assistant_web_search,
+            assistant::assistant_fetch_url,
             // 数据目录 & 图片存储
             assistant::assistant_ensure_data_dir,
             assistant::assistant_save_image,

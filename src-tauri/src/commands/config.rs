@@ -560,12 +560,16 @@ pub async fn upgrade_openclaw(app: tauri::AppHandle, source: String) -> Result<S
     let stdout = child.stdout.take();
 
     // stderr 每行递增进度（10→80 区间），让用户看到进度在动
+    // 同时收集 stderr 用于失败时返回给前端诊断
     let app2 = app.clone();
+    let stderr_lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let stderr_lines2 = stderr_lines.clone();
     let handle = std::thread::spawn(move || {
         let mut progress: u32 = 15;
         if let Some(pipe) = stderr {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                 let _ = app2.emit("upgrade-log", &line);
+                stderr_lines2.lock().unwrap().push(line);
                 if progress < 75 {
                     progress += 2;
                     let _ = app2.emit("upgrade-progress", progress);
@@ -587,8 +591,24 @@ pub async fn upgrade_openclaw(app: tauri::AppHandle, source: String) -> Result<S
     let _ = app.emit("upgrade-progress", 100);
 
     if !status.success() {
-        let _ = app.emit("upgrade-log", "❌ 升级失败");
-        return Err("升级失败，请查看日志".into());
+        let code = status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or("unknown".into());
+        let _ = app.emit("upgrade-log", format!("❌ 升级失败 (exit code: {code})"));
+        // 把 stderr 最后 15 行带进错误消息，确保前端诊断函数能匹配到
+        // npm 内部错误码（如 -4058 ENOENT、EPERM 等）
+        let tail = stderr_lines
+            .lock()
+            .unwrap()
+            .iter()
+            .rev()
+            .take(15)
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(format!("升级失败，exit code: {code}\n{tail}"));
     }
 
     // 安装成功后再卸载旧包（确保 CLI 始终可用）
@@ -1024,6 +1044,24 @@ pub async fn restart_gateway() -> Result<String, String> {
     reload_gateway().await
 }
 
+/// 清理 base URL：去掉尾部斜杠和已知端点路径，防止用户粘贴完整端点 URL 导致路径重复
+fn normalize_base_url(raw: &str) -> String {
+    let mut base = raw.trim_end_matches('/').to_string();
+    for suffix in &[
+        "/chat/completions",
+        "/completions",
+        "/responses",
+        "/messages",
+        "/models",
+    ] {
+        if base.ends_with(suffix) {
+            base.truncate(base.len() - suffix.len());
+            break;
+        }
+    }
+    base.trim_end_matches('/').to_string()
+}
+
 /// 测试模型连通性：向 provider 发送一个简单的 chat completion 请求
 #[tauri::command]
 pub async fn test_model(
@@ -1031,7 +1069,7 @@ pub async fn test_model(
     api_key: String,
     model_id: String,
 ) -> Result<String, String> {
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let url = format!("{}/chat/completions", normalize_base_url(&base_url));
 
     let body = serde_json::json!({
         "model": model_id,
@@ -1100,7 +1138,7 @@ pub async fn test_model(
 /// 获取服务商的远程模型列表（调用 /models 接口）
 #[tauri::command]
 pub async fn list_remote_models(base_url: String, api_key: String) -> Result<Vec<String>, String> {
-    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let url = format!("{}/models", normalize_base_url(&base_url));
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))

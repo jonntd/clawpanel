@@ -8,6 +8,7 @@ import { detectOpenclawStatus, isOpenclawReady, isGatewayRunning, onGatewayChang
 import { wsClient } from './lib/ws-client.js'
 import { api } from './lib/tauri-api.js'
 import { version as APP_VERSION } from '../package.json'
+import { statusIcon } from './lib/icons.js'
 
 // 样式
 import './style/variables.css'
@@ -19,6 +20,7 @@ import './style/chat.css'
 import './style/agents.css'
 import './style/debug.css'
 import './style/assistant.css'
+import './style/ai-drawer.css'
 
 // 初始化主题
 initTheme()
@@ -183,7 +185,7 @@ async function boot() {
     banner.id = 'pw-change-banner'
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:center;gap:12px;font-size:13px;font-weight:500;box-shadow:0 2px 8px rgba(0,0,0,0.15)'
     banner.innerHTML = `
-      <span>⚠️ 当前使用的是系统生成的默认密码，为了安全请尽快修改</span>
+      <span>${statusIcon('warn', 14)} 当前使用的是系统生成的默认密码，为了安全请尽快修改</span>
       <a href="#/security" style="color:#fff;background:rgba(255,255,255,0.2);padding:4px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600" onclick="document.getElementById('pw-change-banner').remove();sessionStorage.removeItem('clawpanel_must_change_pw')">前往安全设置</a>
       <button onclick="this.parentElement.remove()" style="background:none;border:none;color:rgba(255,255,255,0.7);cursor:pointer;font-size:16px;padding:0 4px;margin-left:4px">✕</button>
     `
@@ -286,7 +288,7 @@ function setupGatewayBanner() {
       banner.classList.remove('gw-banner-hidden')
       banner.innerHTML = `
         <div class="gw-banner-content">
-          <span class="gw-banner-icon">⚠</span>
+          <span class="gw-banner-icon">${statusIcon('warn', 16)}</span>
           <span>Gateway 未启动，部分功能不可用</span>
           <button class="btn btn-sm btn-primary" id="btn-gw-start">启动 Gateway</button>
         </div>
@@ -302,7 +304,7 @@ function setupGatewayBanner() {
           const errMsg = err.message || String(err)
           banner.innerHTML = `
             <div class="gw-banner-content">
-              <span class="gw-banner-icon">⚠</span>
+              <span class="gw-banner-icon">${statusIcon('warn', 16)}</span>
               <span>启动失败: ${errMsg}</span>
               <button class="btn btn-sm btn-primary" id="btn-gw-start">重试</button>
               <a class="btn btn-sm btn-ghost" href="#/logs" style="color:inherit;text-decoration:underline">查看日志</a>
@@ -331,7 +333,7 @@ function setupGatewayBanner() {
         } catch {}
         banner.innerHTML = `
           <div class="gw-banner-content">
-            <span class="gw-banner-icon">⚠</span>
+            <span class="gw-banner-icon">${statusIcon('warn', 16)}</span>
             <span>启动超时，Gateway 可能仍在启动中</span>
             <button class="btn btn-sm btn-primary" id="btn-gw-start">重试</button>
             <a class="btn btn-sm btn-ghost" href="#/logs" style="color:inherit;text-decoration:underline">查看日志</a>
@@ -353,7 +355,7 @@ function showGuardianRecovery() {
   banner.classList.remove('gw-banner-hidden')
   banner.innerHTML = `
     <div class="gw-banner-content" style="flex-wrap:wrap;gap:8px">
-      <span class="gw-banner-icon">🛠</span>
+      <span class="gw-banner-icon">${statusIcon('warn', 16)}</span>
       <span>Gateway 反复启动失败，可能配置有误</span>
       <button class="btn btn-sm btn-primary" id="btn-gw-recover-restart">重试启动</button>
       <button class="btn btn-sm btn-secondary" id="btn-gw-recover-backup">从备份恢复</button>
@@ -384,4 +386,66 @@ function showGuardianRecovery() {
   const auth = await checkAuth()
   if (!auth.ok) await showLoginOverlay(auth.defaultPw)
   boot()
+
+  // 初始化全局 AI 助手浮动按钮（延迟加载，不阻塞启动）
+  setTimeout(async () => {
+    const { initAIFab, registerPageContext, openAIDrawerWithError } = await import('./components/ai-drawer.js')
+    initAIFab()
+
+    // 注册各页面上下文提供器
+    registerPageContext('/chat-debug', async () => {
+      const { isOpenclawReady, isGatewayRunning } = await import('./lib/app-state.js')
+      const { wsClient } = await import('./lib/ws-client.js')
+      const { api } = await import('./lib/tauri-api.js')
+      const lines = ['## 系统诊断快照']
+      lines.push(`- OpenClaw: ${isOpenclawReady() ? '就绪' : '未就绪'}`)
+      lines.push(`- Gateway: ${isGatewayRunning() ? '运行中' : '未运行'}`)
+      lines.push(`- WebSocket: ${wsClient.connected ? '已连接' : '未连接'}`)
+      try {
+        const node = await api.checkNode()
+        lines.push(`- Node.js: ${node?.version || '未知'}`)
+      } catch {}
+      try {
+        const ver = await api.getVersionInfo()
+        lines.push(`- 版本: ${ver?.current || '?'} → ${ver?.latest || '?'}`)
+      } catch {}
+      return { detail: lines.join('\n') }
+    })
+
+    registerPageContext('/services', async () => {
+      const { isGatewayRunning } = await import('./lib/app-state.js')
+      const { api } = await import('./lib/tauri-api.js')
+      const lines = ['## 服务状态']
+      lines.push(`- Gateway: ${isGatewayRunning() ? '运行中' : '未运行'}`)
+      try {
+        const svc = await api.getServicesStatus()
+        if (svc?.[0]) {
+          lines.push(`- CLI: ${svc[0].cli_installed ? '已安装' : '未安装'}`)
+          lines.push(`- PID: ${svc[0].pid || '无'}`)
+        }
+      } catch {}
+      return { detail: lines.join('\n') }
+    })
+
+    registerPageContext('/gateway', async () => {
+      const { api } = await import('./lib/tauri-api.js')
+      try {
+        const config = await api.readOpenclawConfig()
+        const gw = config?.gateway || {}
+        const lines = ['## Gateway 配置']
+        lines.push(`- 端口: ${gw.port || 18789}`)
+        lines.push(`- 模式: ${gw.mode || 'local'}`)
+        lines.push(`- Token: ${gw.auth?.token ? '已设置' : '未设置'}`)
+        if (gw.controlUi?.allowedOrigins) lines.push(`- Origins: ${JSON.stringify(gw.controlUi.allowedOrigins)}`)
+        return { detail: lines.join('\n') }
+      } catch { return null }
+    })
+
+    registerPageContext('/setup', () => {
+      return { detail: '用户正在进行 OpenClaw 初始安装，请帮助检查 Node.js 环境和网络状况' }
+    })
+
+    // 挂到全局，供安装/升级失败时调用
+    window.__openAIDrawerWithError = openAIDrawerWithError
+  }, 500)
 })()

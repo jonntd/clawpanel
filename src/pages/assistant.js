@@ -7,12 +7,34 @@ import { renderMarkdown } from '../lib/markdown.js'
 import { toast } from '../components/toast.js'
 import { showConfirm } from '../components/modal.js'
 import { api } from '../lib/tauri-api.js'
+import { OPENCLAW_KB } from '../lib/openclaw-kb.js'
+import { icon, statusIcon } from '../lib/icons.js'
 
 // ── 常量 ──
 const STORAGE_KEY = 'clawpanel-assistant'
 const SESSIONS_KEY = 'clawpanel-assistant-sessions'
 const MAX_SESSIONS = 50
 const MAX_CONTEXT_TOKENS = 30 // 最近 N 条消息作为上下文
+
+// ── gpt.qt.cool 推广配置 ──
+const QTCOOL = {
+  baseUrl: 'https://gpt.qt.cool/v1',
+  defaultKey: 'sk-0JDu7hyc51ZKD4iNebpFu07EUEhXmVVc',
+  site: 'https://gpt.qt.cool/',
+  usageUrl: 'https://gpt.qt.cool/user?key=',
+  models: [
+    { id: 'gpt-5.4', name: 'GPT-5.4', hot: true },
+    { id: 'gpt-5.3-codex', name: 'GPT-5.3 Codex' },
+    { id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' },
+    { id: 'gpt-5.2', name: 'GPT-5.2' },
+    { id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max' },
+    { id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
+    { id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
+    { id: 'gpt-5.1', name: 'GPT-5.1' },
+    { id: 'gpt-5-codex', name: 'GPT-5 Codex' },
+    { id: 'gpt-5', name: 'GPT-5' },
+  ]
+}
 
 // ── 图片文件存储（通过 Tauri 后端持久化到 ~/.openclaw/clawpanel/images/）──
 async function saveImageToFile(id, dataUrl) {
@@ -74,11 +96,10 @@ ${personality}
 - **开源项目**:
   - **ClawPanel** — OpenClaw 可视化管理面板（Tauri v2），官网 https://claw.qt.cool
   - **OpenClaw 汉化版** — AI Agent 平台中文版，npm install -g @qingchencloud/openclaw-zh
-  - **ClawApp** — OpenClaw 移动客户端（iOS/Android），npm install -g @anthropic-ai/claw-app
-  - **cftunnel** — Cloudflare Tunnel CLI 封装工具，一键内网穿透
+  - **ClawApp** — OpenClaw 手机聊天客户端（H5/PWA），通过一键脚本部署，GitHub: https://github.com/qingchencloud/clawapp
+  - **cftunnel** — 全协议内网穿透 CLI（Cloudflare Tunnel + frp 双引擎，Go 编写），GitHub: https://github.com/qingchencloud/cftunnel
   - **cfsite** — Cloudflare Pages 部署 CLI
   - **WebToEXE** — 网站打包成桌面应用
-  - **AppForge** — 网站打包 SaaS 平台，https://app.qrj.ai
 
 ## ClawPanel 是什么
 - OpenClaw 的可视化管理面板，基于 Tauri v2 的跨平台桌面应用（Windows/macOS/Linux）
@@ -89,7 +110,7 @@ ${personality}
 - 开源的 AI Agent 平台，支持多模型、多 Agent、MCP 工具调用
 - 核心组件: Gateway（API 网关）、Agent（AI 代理）、Tools（工具系统）
 - 配置文件: ~/.openclaw/openclaw.json（全局配置）
-- 安装方式: npm install -g @qingchencloud/openclaw-zh（汉化版）或 npm install -g @anthropic-ai/openclaw（官方版）
+- 安装方式: npm install -g @qingchencloud/openclaw-zh（汉化版，推荐）或 npm install -g openclaw（官方英文版）
 
 ## OpenClaw CLI 命令速查
 ### 基础命令
@@ -138,11 +159,16 @@ ${personality}
 
 ## 生态项目安装指引
 当用户问到如何安装其他产品时，推荐以下安装方式：
-- **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh
-- **OpenClaw 官方版**: npm install -g @anthropic-ai/openclaw
-- **ClawApp 移动客户端**: npm install -g @anthropic-ai/claw-app
+- **OpenClaw 汉化版**: npm install -g @qingchencloud/openclaw-zh（推荐国内用户）
+- **OpenClaw 官方版**: npm install -g openclaw
+- **ClawApp 手机客户端**:
+  - Mac/Linux: curl -fsSL https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.sh | bash
+  - Windows: irm https://raw.githubusercontent.com/qingchencloud/clawapp/main/install.ps1 | iex
+  - 或手动: git clone https://github.com/qingchencloud/clawapp.git && cd clawapp && npm run install:all && npm run build:h5
 - **ClawPanel**: 从 https://github.com/qingchencloud/clawpanel/releases 下载
-- **cftunnel**: 从 https://github.com/qingchencloud/cftunnel/releases 下载
+- **cftunnel 内网穿透**:
+  - Mac/Linux: curl -fsSL https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.sh | bash
+  - Windows: irm https://raw.githubusercontent.com/qingchencloud/cftunnel/main/install.ps1 | iex
 - **更多项目**: 访问 https://github.com/qingchencloud
 
 ## 社区贡献指引
@@ -204,6 +230,14 @@ Issue 模板（帮用户填好）：
 - 收集反馈时（哪些功能有问题？）
 
 注意：每个选项应该简短明了，不要超过 4 个选项（用户可以输入自定义内容）。
+
+## web_search / fetch_url 使用指南
+当你无法确定答案或需要最新信息时，可以使用 web_search 搜索互联网：
+- 搜索错误信息时，用引号包裹关键错误文本
+- 加 site:github.com 搜索 GitHub Issues
+- 加 site:stackoverflow.com 搜索 StackOverflow
+- 搜索后如需更多细节，用 fetch_url 抓取具体页面内容
+- fetch_url 返回纯文本格式，大页面会截断到 100KB
 
 ## 你的工作方式
 - 用中文回复
@@ -297,6 +331,37 @@ const TOOL_DEFS = {
       },
     },
   ],
+  webSearch: [
+    {
+      type: 'function',
+      function: {
+        name: 'web_search',
+        description: '联网搜索关键词，返回搜索结果列表（标题、链接、摘要）。用于查找错误解决方案、最新文档、GitHub Issues 等。',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: '搜索关键词' },
+            max_results: { type: 'integer', description: '最大结果数（默认 5）' },
+          },
+          required: ['query'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'fetch_url',
+        description: '抓取指定 URL 的网页内容，返回纯文本/Markdown 格式。用于获取搜索结果中某个页面的详细内容。',
+        parameters: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: '要抓取的网页 URL' },
+          },
+          required: ['url'],
+        },
+      },
+    },
+  ],
   fileOps: [
     {
       type: 'function',
@@ -378,129 +443,137 @@ function isCriticalCommand(command) {
 const BUILTIN_SKILLS = [
   {
     id: 'check-config',
-    icon: '🔧',
+    icon: icon('wrench', 16),
     name: '检查 OpenClaw 配置',
     desc: '读取并分析 openclaw.json，检查配置是否正确',
     tools: ['fileOps'],
     prompt: `请帮我检查 OpenClaw 的配置文件。
 
 具体操作：
-1. 先调用 get_system_info 获取系统信息，确定配置目录路径
-2. 用 list_directory 查看 OpenClaw 配置目录（.openclaw/）结构
-3. 用 read_file 读取 openclaw.json
+1. 调用 get_system_info 获取系统信息，确定主目录和 OS 类型
+2. 用 list_directory 查看 ~/.openclaw/ 目录结构
+3. 用 read_file 读取 ~/.openclaw/openclaw.json
 4. 分析配置内容，检查：
-   - models.providers 中的服务商配置是否正确（baseUrl、apiKey 格式）
-   - gateway 配置（port、mode、auth）是否合理
-   - 有没有常见的配置错误（比如 mode 放在了顶层）
-5. 给出配置健康度评估和改进建议`,
+   - models.providers 服务商配置（baseUrl 格式、apiKey 是否存在）
+   - gateway 配置（port 默认 18789、mode 必须在 gateway 对象内）
+   - 常见配置错误（mode 放在顶层、缺少 gateway 对象、controlUi.allowedOrigins 未配置）
+5. 给出配置健康度评估和具体改进建议`,
   },
   {
     id: 'diagnose-gateway',
-    icon: '🏥',
+    icon: icon('shield', 16),
     name: '诊断 Gateway',
     desc: '检查 Gateway 运行状态、端口、日志',
     tools: ['terminal', 'fileOps'],
     prompt: `请帮我诊断 OpenClaw Gateway 的运行状态。
 
 具体操作：
-1. 先调用 get_system_info 获取操作系统类型，据此选择正确的命令
-2. 检查 Gateway 进程是否在运行（根据 OS 选择合适的进程查看命令）
-3. 检查 Gateway 端口（默认 18789）是否在监听
-4. 读取最近的 Gateway 日志（.openclaw/logs/gateway.log，取最后 50 行）
-5. 分析日志中是否有错误或警告
-6. 给出诊断结论和建议`,
+1. 调用 get_system_info 获取 OS 类型和主目录
+2. 用 list_processes 工具检查 openclaw/gateway 进程是否在运行
+3. 用 check_port 工具检查端口 18789 是否在监听
+4. 用 read_file 读取 ~/.openclaw/logs/gateway.log（取最后 50 行）
+5. 分析日志中的 ERROR、WARN、fail 等关键词
+6. 给出诊断结论（进程状态 + 端口状态 + 日志分析）和修复建议`,
   },
   {
     id: 'browse-dir',
-    icon: '📂',
+    icon: icon('folder', 16),
     name: '浏览配置目录',
     desc: '查看 .openclaw 目录结构和文件',
     tools: ['fileOps'],
     prompt: `请帮我浏览 OpenClaw 的配置目录结构。
 
 具体操作：
-1. 先调用 get_system_info 获取主目录路径
-2. 用 list_directory 列出 .openclaw/ 根目录
-3. 列出 .openclaw/agents/ 下的 Agent 列表
-4. 对于默认 Agent（通常是 main），列出其 agent 子目录
-5. 简要说明每个目录/文件的作用
-6. 标注哪些是关键配置文件`,
+1. 调用 get_system_info 获取主目录路径（Windows: $env:USERPROFILE, Mac/Linux: ~）
+2. 用 list_directory 列出 ~/.openclaw/ 根目录
+3. 列出 ~/.openclaw/agents/ 下的 Agent 列表
+4. 对于 main Agent，列出 ~/.openclaw/agents/main/agent/ 子目录
+5. 简要说明每个目录/文件的作用：
+   - openclaw.json: 全局配置（模型、Gateway、工具）
+   - clawpanel.json: ClawPanel 面板配置
+   - mcp.json: MCP 工具配置
+   - agents/: Agent 工作目录
+   - logs/: 日志文件
+   - backups/: 配置备份
+6. 标注关键配置文件和常用路径`,
   },
   {
     id: 'check-env',
-    icon: '💻',
+    icon: icon('monitor', 16),
     name: '检查系统环境',
     desc: '检测 Node.js、npm 版本和系统信息',
     tools: ['terminal'],
     prompt: `请帮我检查当前系统环境是否满足 OpenClaw 的运行要求。
 
 具体操作：
-1. 先调用 get_system_info 获取操作系统、架构等基础信息
-2. 根据 OS 类型执行对应命令检查 Node.js 版本（node -v），需要 >= 18
-3. 检查 npm 版本（npm -v）
-4. 检查 OpenClaw 是否已安装及版本
-5. 检查磁盘空间
-6. 给出环境评估和缺失项提示`,
+1. 调用 get_system_info 获取 OS、架构、Node.js 版本等基础信息
+2. 用 run_command 检查 Node.js 版本（node -v），要求 >= 18
+3. 用 run_command 检查 npm 版本（npm -v）
+4. 用 run_command 检查 OpenClaw CLI（openclaw --version）
+5. 用 check_port 检查 Gateway 端口 18789
+6. 给出环境评估报告，每项标注通过/失败，并给出缺失项的安装命令`,
   },
   {
     id: 'analyze-logs',
-    icon: '📋',
+    icon: icon('clipboard', 16),
     name: '分析错误日志',
     desc: '读取最近日志，定位错误原因',
     tools: ['terminal', 'fileOps'],
     prompt: `请帮我分析 OpenClaw 最近的日志，找出可能的问题。
 
 具体操作：
-1. 先调用 get_system_info 获取系统信息和主目录
-2. 用 list_directory 查看 .openclaw/logs/ 有哪些日志文件
-3. 根据 OS 选择合适的命令读取 gateway.log 最后 100 行
-4. 搜索 ERROR、WARN、fail、exception 等关键词
-5. 如果有错误，分析原因并给出修复建议
-6. 汇总日志分析报告`,
+1. 调用 get_system_info 获取主目录路径
+2. 用 list_directory 查看 ~/.openclaw/logs/ 有哪些日志文件
+3. 用 read_file 读取 ~/.openclaw/logs/gateway.log
+4. 搜索 ERROR、WARN、fail、exception、SIGTERM、Bootstrap 等关键词
+5. 对照常见问题速查表分析错误原因
+6. 汇总日志分析报告，给出具体修复步骤`,
   },
   {
     id: 'fix-common',
-    icon: '🔨',
+    icon: icon('wrench', 16),
     name: '一键排障',
     desc: '自动检测并修复常见问题',
     tools: ['terminal', 'fileOps'],
     prompt: `请帮我自动检测并修复 OpenClaw 的常见问题。
 
 先调用 get_system_info 获取系统信息，然后按以下步骤逐一检查：
-1. **配置检查**：读取 openclaw.json，检查是否有已知的配置错误（mode 在顶层、缺少 gateway 对象等）
-2. **models.json 同步**：对比 openclaw.json 和 agents/main/agent/models.json 的 providers，检查是否同步
-3. **Gateway 状态**：根据 OS 选择合适命令，检查进程是否运行、端口是否监听
+1. **配置检查**：用 read_file 读取 openclaw.json，检查是否有已知错误（mode 在顶层、缺少 gateway 对象等）
+2. **models.json 同步**：用 read_file 对比 openclaw.json 和 agents/main/agent/models.json 的 providers
+3. **Gateway 状态**：用 list_processes 检查 openclaw 进程，用 check_port 检查端口 18789
 4. **WebSocket 配置**：检查 gateway.controlUi.allowedOrigins 是否包含 "*"
-5. **Node.js 环境**：检查 node 和 npm 是否可用
+5. **Node.js 环境**：用 run_command 检查 node 和 npm 版本
 
-对每个检查项给出 ✅ 或 ❌ 状态，并对发现的问题给出修复建议（但不要自动修改配置文件，等我确认）。`,
+对每个检查项给出通过/失败状态，并对发现的问题给出具体修复命令（但不要自动修改配置文件，等我确认）。`,
   },
   {
     id: 'report-bug',
-    icon: '🐛',
+    icon: icon('bug', 16),
     name: '提交 Bug 报告',
     desc: '整理问题信息，生成标准 Issue 提交到 GitHub',
     tools: ['terminal', 'fileOps'],
     prompt: `我想反馈一个 Bug，请帮我整理成标准的 GitHub Issue。
 
 具体操作：
-1. 先问我遇到了什么问题（如果我还没说的话）
-2. 调用 get_system_info 获取我的系统环境信息
-3. 如果有日志，帮我读取最近的错误日志
-4. 自动收集环境信息：OS 版本、Node.js 版本、OpenClaw 版本、ClawPanel 版本
-5. 按照标准 Issue 模板整理好内容：
+1. 用 ask_user 工具询问我遇到了什么问题（如果我还没说的话）
+2. 调用 get_system_info 获取系统环境信息
+3. 用 run_command 收集：openclaw --version、node -v 等版本信息
+4. 用 read_file 读取最近的错误日志（如有）
+5. 按标准 Issue 模板整理：
    - **问题描述**（一句话）
    - **复现步骤**（1, 2, 3...）
-   - **期望行为**
-   - **实际行为**
+   - **期望行为** / **实际行为**
    - **环境信息**（自动填充）
    - **相关日志**（如有）
-6. 把整理好的 Issue 内容用代码块展示，并给出对应仓库的 Issue 链接
-7. 告诉我直接复制粘贴到 GitHub 即可提交`,
+6. 用代码块展示完整 Issue 内容，给出对应仓库的 Issue 链接：
+   - ClawPanel: https://github.com/qingchencloud/clawpanel/issues/new
+   - OpenClaw: https://github.com/qingchencloud/openclaw-zh/issues/new
+   - cftunnel: https://github.com/qingchencloud/cftunnel/issues/new
+   - ClawApp: https://github.com/qingchencloud/clawapp/issues/new`,
   },
   {
     id: 'pr-assistant',
-    icon: '🔀',
+    icon: icon('zap', 16),
     name: 'PR 助手',
     desc: '定位 Bug 原因，生成修复代码和 PR 描述',
     tools: ['terminal', 'fileOps'],
@@ -538,6 +611,9 @@ function getEnabledTools() {
 
   // 终端工具：受设置开关控制（优先级高于模式）
   if (t.terminal !== false) tools.push(...TOOL_DEFS.terminal)
+
+  // 联网搜索工具：受设置开关控制
+  if (t.webSearch !== false) tools.push(...TOOL_DEFS.webSearch)
 
   // 文件工具：受设置开关控制 + 规划模式排除写入
   if (t.fileOps !== false) {
@@ -643,7 +719,41 @@ function playModeTransition(page, modeKey) {
 }
 
 function buildSystemPrompt() {
-  let prompt = getSystemPromptBase()
+  let prompt = ''
+
+  // 灵魂移植模式：用 OpenClaw Agent 的身份替代默认人设
+  if (_config?.soulSource?.startsWith('openclaw:') && _soulCache) {
+    prompt += '# 你的身份\n'
+    if (_soulCache.identity) prompt += _soulCache.identity + '\n\n'
+    if (_soulCache.soul) prompt += '# 灵魂\n' + _soulCache.soul + '\n\n'
+    if (_soulCache.user) prompt += '# 你的用户\n' + _soulCache.user + '\n\n'
+    if (_soulCache.agents) {
+      // 截断 AGENTS.md 到约 4000 字符以节省 token
+      const agentsContent = _soulCache.agents.length > 4000 ? _soulCache.agents.slice(0, 4000) + '\n\n[...已截断]' : _soulCache.agents
+      prompt += '# 操作规则\n' + agentsContent + '\n\n'
+    }
+    if (_soulCache.tools) prompt += '# 工具笔记\n' + _soulCache.tools + '\n\n'
+    if (_soulCache.memory) {
+      const memContent = _soulCache.memory.length > 3000 ? _soulCache.memory.slice(-3000) : _soulCache.memory
+      prompt += '# 长期记忆\n' + memContent + '\n\n'
+    }
+    if (_soulCache.recentMemories?.length) {
+      prompt += '# 最近记忆\n'
+      for (const m of _soulCache.recentMemories) {
+        const content = m.content.length > 800 ? m.content.slice(0, 800) + '...' : m.content
+        prompt += `## ${m.date}\n${content}\n\n`
+      }
+    }
+    // 追加 ClawPanel 特有的产品知识和工具说明
+    prompt += '\n# ClawPanel 工具能力\n你同时是 ClawPanel 内置助手，拥有以下额外能力：\n'
+    prompt += '- 执行终端命令、读写文件、浏览目录\n'
+    prompt += '- 联网搜索和网页抓取\n'
+    prompt += '- 管理 OpenClaw 配置和服务\n'
+    prompt += '- 你精通 OpenClaw 的架构、配置、Gateway、Agent 管理\n'
+  } else {
+    prompt += getSystemPromptBase()
+  }
+
   const modeKey = currentMode()
   const mode = MODES[modeKey]
 
@@ -709,7 +819,163 @@ function buildSystemPrompt() {
   }
   prompt += '\n\n当用户的需求匹配某个技能时，可以建议用户点击对应的技能卡片，或者你直接按技能的步骤操作。'
 
+  // 注入内置 OpenClaw 知识库
+  prompt += '\n\n' + OPENCLAW_KB
+
+  // 注入用户自定义知识库内容
+  const kbEnabled = (_config.knowledgeFiles || []).filter(f => f.enabled !== false && f.content)
+  if (kbEnabled.length > 0) {
+    prompt += '\n\n## 用户自定义知识库'
+    prompt += '\n以下是用户提供的参考知识，回答问题时请优先参考这些内容：'
+    for (const kb of kbEnabled) {
+      const content = kb.content.length > 5000 ? kb.content.slice(0, 5000) + '\n\n[...内容已截断]' : kb.content
+      prompt += `\n\n### ${kb.name}\n${content}`
+    }
+  }
+
   return prompt
+}
+
+// ── 灵魂移植：扫描可用 Agent ──
+async function scanOpenClawAgents() {
+  try {
+    const sysInfo = await api.assistantSystemInfo()
+    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+    if (!home) return []
+    const agents = []
+    // 默认主工作区始终存在于 ~/.openclaw/workspace
+    let defaultExists = false
+    try { await api.assistantListDir(home + '/.openclaw/workspace'); defaultExists = true } catch {}
+    agents.push({ id: 'default', label: '默认 (主工作区)', hasWorkspace: defaultExists })
+    // 扫描自定义 Agent
+    try {
+      const agentsDir = home + '/.openclaw/agents'
+      const listing = await api.assistantListDir(agentsDir)
+      const dirs = listing.split('\n').filter(l => l.includes('[DIR]'))
+        .map(l => l.replace(/^\[DIR\]\s*/, '').replace(/[\/\\]+$/, '').trim()).filter(Boolean)
+      for (const id of dirs) {
+        if (id === 'main') continue // main 就是默认，已在上面添加
+        const wsPath = agentsDir + '/' + id + '/workspace'
+        let hasWorkspace = false
+        try { await api.assistantListDir(wsPath); hasWorkspace = true } catch {}
+        agents.push({ id, label: id, hasWorkspace })
+      }
+    } catch {}
+    return agents
+  } catch (err) {
+    console.error('[soul] 扫描 Agent 失败:', err)
+    return []
+  }
+}
+
+// ── 灵魂移植：加载指定 Agent 的身份 ──
+async function loadOpenClawSoul(agentId = 'default') {
+  try {
+    const sysInfo = await api.assistantSystemInfo()
+    const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+    if (!home) throw new Error('无法获取主目录')
+    // default/main 使用 ~/.openclaw/workspace，其他使用 agents/{id}/workspace
+    let ws
+    if (agentId === 'default' || agentId === 'main') {
+      ws = home + '/.openclaw/workspace'
+    } else {
+      ws = home + '/.openclaw/agents/' + agentId + '/workspace'
+    }
+    let wsExists = false
+    try { await api.assistantListDir(ws); wsExists = true } catch {}
+    if (!wsExists) throw new Error('Agent workspace 不存在: ' + agentId)
+
+    const readSafe = async (p) => { try { return await api.assistantReadFile(p) } catch { return null } }
+
+    const soul = {
+      agentId,
+      identity: await readSafe(ws + '/IDENTITY.md'),
+      soul: await readSafe(ws + '/SOUL.md'),
+      user: await readSafe(ws + '/USER.md'),
+      agents: await readSafe(ws + '/AGENTS.md'),
+      tools: await readSafe(ws + '/TOOLS.md'),
+      memory: await readSafe(ws + '/MEMORY.md'),
+      recentMemories: [],
+    }
+
+    // 读取最近 3 天的每日记忆
+    try {
+      const memDir = await api.assistantListDir(ws + '/memory')
+      const files = memDir.split('\n').map(l => l.trim()).filter(l => l.match(/\d{4}-\d{2}-\d{2}/))
+      const recent = files.sort().slice(-3)
+      for (const f of recent) {
+        const fname = f.replace(/^\[FILE\]\s*/, '').replace(/\s*\(.*\)$/, '').trim()
+        const content = await readSafe(ws + '/memory/' + fname)
+        if (content) soul.recentMemories.push({ date: fname, content })
+      }
+    } catch {}
+
+    _soulCache = soul
+    return soul
+  } catch (err) {
+    console.error('[soul] 加载失败:', err)
+    _soulCache = null
+    return null
+  }
+}
+
+// 获取灵魂文件的统计信息（用于 UI 显示）
+function getSoulStats() {
+  if (!_soulCache) return []
+  const files = [
+    { name: 'SOUL.md', desc: '灵魂 · 人格边界', content: _soulCache.soul },
+    { name: 'IDENTITY.md', desc: '身份 · 名称形象', content: _soulCache.identity },
+    { name: 'USER.md', desc: '用户 · 偏好称呼', content: _soulCache.user },
+    { name: 'AGENTS.md', desc: '规则 · 操作指令', content: _soulCache.agents },
+    { name: 'TOOLS.md', desc: '笔记 · 工具环境', content: _soulCache.tools },
+    { name: 'MEMORY.md', desc: '记忆 · 长期存储', content: _soulCache.memory },
+  ]
+  return files.map(f => ({
+    name: f.name,
+    desc: f.desc,
+    loaded: !!f.content,
+    size: f.content ? f.content.length : 0,
+  }))
+}
+
+// 渲染灵魂文件加载状态卡片
+function renderSoulStats(soul) {
+  if (!soul) return ''
+  const stats = getSoulStats()
+  const loaded = stats.filter(f => f.loaded)
+  const totalSize = stats.reduce((s, f) => s + f.size, 0)
+  const memCount = soul.recentMemories?.length || 0
+  const sizeStr = totalSize > 1024 ? (totalSize / 1024).toFixed(1) + ' KB' : totalSize + ' B'
+
+  let html = `<div class="ast-soul-header">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span>已加载 <strong>${loaded.length}/${stats.length}</strong> 个文件（${sizeStr}）</span>
+  </div>`
+
+  html += '<div class="ast-soul-files">'
+  for (const f of stats) {
+    const fSize = f.loaded ? (f.size > 1024 ? (f.size / 1024).toFixed(1) + ' KB' : f.size + ' B') : '—'
+    html += `<div class="ast-soul-file ${f.loaded ? 'loaded' : 'missing'}">
+      <div class="ast-soul-file-icon">${f.loaded ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'}</div>
+      <div class="ast-soul-file-info">
+        <span class="ast-soul-file-name">${f.name}</span>
+        <span class="ast-soul-file-desc">${f.desc}</span>
+      </div>
+      <span class="ast-soul-file-size">${fSize}</span>
+    </div>`
+  }
+  if (memCount > 0) {
+    html += `<div class="ast-soul-file loaded">
+      <div class="ast-soul-file-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+      <div class="ast-soul-file-info">
+        <span class="ast-soul-file-name">memory/</span>
+        <span class="ast-soul-file-desc">每日记忆日志</span>
+      </div>
+      <span class="ast-soul-file-size">${memCount} 个文件</span>
+    </div>`
+  }
+  html += '</div>'
+  return html
 }
 
 // ── 状态 ──
@@ -723,6 +989,8 @@ const _sessionStatus = new Map() // sessionId → 'idle' | 'streaming' | 'waitin
 let _messageQueue = [] // [{ id, text, ts }]
 let _streamRefreshTimer = null // 后台流式刷新定时器
 let _pendingImages = [] // [{ id, dataUrl, name, size }] 待发送图片
+let _errorContext = null // 待处理的错误上下文 { scene, title, hint, error, ts }
+let _soulCache = null // 灵魂移植缓存 { identity, soul, user, agents, tools, memory, recentMemories[] }
 
 // ── 节流保存 ──
 function throttledSave() {
@@ -936,13 +1204,14 @@ function loadConfig() {
     _config = raw ? JSON.parse(raw) : null
   } catch { _config = null }
   if (!_config) {
-    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY }
+    _config = { baseUrl: '', apiKey: '', model: '', temperature: 0.7, tools: { terminal: false, fileOps: false, webSearch: false }, assistantName: DEFAULT_NAME, assistantPersonality: DEFAULT_PERSONALITY }
   }
   if (!_config.assistantName) _config.assistantName = DEFAULT_NAME
   if (!_config.assistantPersonality) _config.assistantPersonality = DEFAULT_PERSONALITY
-  if (!_config.tools) _config.tools = { terminal: false, fileOps: false }
+  if (!_config.tools) _config.tools = { terminal: false, fileOps: false, webSearch: false }
   if (!_config.mode) _config.mode = DEFAULT_MODE
   if (!_config.apiType) _config.apiType = 'openai'
+  if (!Array.isArray(_config.knowledgeFiles)) _config.knowledgeFiles = []
   return _config
 }
 
@@ -1010,7 +1279,7 @@ function autoTitle(session) {
   if (session.messages.length >= 1 && session.title === '新会话') {
     const firstUser = session.messages.find(m => m.role === 'user')
     if (firstUser) {
-      const txt = firstUser._text || (typeof firstUser.content === 'string' ? firstUser.content : (firstUser.content?.find?.(p => p.type === 'text')?.text || '📷 图片消息'))
+      const txt = firstUser._text || (typeof firstUser.content === 'string' ? firstUser.content : (firstUser.content?.find?.(p => p.type === 'text')?.text || '[图片消息]'))
       // 取第一行或前30字作为标题（跳过空行）
       const firstLine = txt.split('\n').find(l => l.trim()) || txt
       const title = firstLine.slice(0, 30) + (firstLine.length > 30 ? '...' : '')
@@ -1183,7 +1452,7 @@ async function callChatCompletions(base, messages, onChunk) {
         reasoningChunks++
         reasoningBuf += d.reasoning_content
       }
-    })
+    }, _abortController?.signal)
 
     _lastDebugInfo.chunks = { total: chunkCount, content: contentChunks, reasoning: reasoningChunks }
 
@@ -1247,7 +1516,7 @@ async function callResponsesAPI(base, messages, onChunk) {
     if (json.choices?.[0]?.delta?.content) {
       onChunk(json.choices[0].delta.content)
     }
-  })
+  }, _abortController?.signal)
 }
 
 // ── Anthropic Messages API（/v1/messages）──
@@ -1313,7 +1582,7 @@ async function callAnthropicMessages(base, messages, onChunk) {
         thinkingBuf += delta.thinking
       }
     }
-  })
+  }, _abortController?.signal)
 
   _lastDebugInfo.chunks = { total: chunkCount, content: contentChunks, thinking: thinkingChunks }
 
@@ -1372,45 +1641,62 @@ async function callGeminiGenerate(base, messages, onChunk) {
     chunkCount++
     const text = json.candidates?.[0]?.content?.parts?.[0]?.text
     if (text) onChunk(text)
-  })
+  }, _abortController?.signal)
 
   _lastDebugInfo.chunks = { total: chunkCount }
 }
 
 // ── 通用 SSE 流读取 ──
-async function readSSEStream(resp, onEvent) {
+async function readSSEStream(resp, onEvent, signal) {
   const reader = resp.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    // chunk 超时：如果 30 秒内没有收到任何数据，视为超时
-    const readPromise = reader.read()
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('流式响应超时：30 秒内未收到数据')), TIMEOUT_CHUNK)
-    )
-    const { done, value } = await Promise.race([readPromise, timeoutPromise])
-    if (done) break
+  // 监听 abort 信号 → 取消 reader（关键：fetch abort 不会自动取消已建立的流）
+  const onAbort = () => { try { reader.cancel() } catch {} }
+  if (signal) {
+    if (signal.aborted) { reader.cancel(); throw new DOMException('Aborted', 'AbortError') }
+    signal.addEventListener('abort', onAbort, { once: true })
+  }
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
 
-    for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
+      // chunk 超时：如果 30 秒内没有收到任何数据，视为超时
+      const readPromise = reader.read()
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('流式响应超时：30 秒内未收到数据')), TIMEOUT_CHUNK)
+      )
+      const { done, value } = await Promise.race([readPromise, timeoutPromise])
+      if (done) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+        break
+      }
 
-      // 处理 SSE event: 行
-      if (trimmed.startsWith('event:')) continue
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
 
-      if (!trimmed.startsWith('data:')) continue
-      const data = trimmed.slice(5).trim()
-      if (data === '[DONE]') return
+      for (const line of lines) {
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+        const trimmed = line.trim()
+        if (!trimmed) continue
 
-      try {
-        onEvent(JSON.parse(data))
-      } catch {}
+        // 处理 SSE event: 行
+        if (trimmed.startsWith('event:')) continue
+
+        if (!trimmed.startsWith('data:')) continue
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') return
+
+        try {
+          onEvent(JSON.parse(data))
+        } catch {}
+      }
     }
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
 }
 
@@ -1434,6 +1720,10 @@ async function executeTool(name, args) {
       return await api.assistantCheckPort(args.port)
     case 'ask_user':
       return await showAskUserCard(args)
+    case 'web_search':
+      return await api.assistantWebSearch(args.query, args.max_results)
+    case 'fetch_url':
+      return await api.assistantFetchUrl(args.url)
     default:
       return `未知工具: ${name}`
   }
@@ -1500,7 +1790,7 @@ function showAskUserCard({ question, type, options, placeholder }) {
       // 替换卡片为已回答状态
       card.innerHTML = `<div class="ast-ask-answered">
         <div class="ast-ask-question">${escHtml(question)}</div>
-        <div class="ast-ask-answer">✓ ${escHtml(answer)}</div>
+        <div class="ast-ask-answer">${icon('check', 14)} ${escHtml(answer)}</div>
       </div>`
       card.classList.add('answered')
 
@@ -1597,6 +1887,10 @@ async function callAIWithTools(messages, onStatus, onToolProgress) {
 
   const MAX_AUTO_ROUNDS = 8
   for (let round = 0; ; round++) {
+    // 检查是否已被用户中止
+    if (!_isStreaming || _abortController?.signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
     if (round >= MAX_AUTO_ROUNDS) {
       const answer = await showAskUserCard({
         question: `AI 已连续调用工具 ${round} 轮，可能陷入循环。你希望怎么做？`,
@@ -1810,7 +2104,7 @@ function renderToolBlocks(toolHistory) {
     // ask_user 工具不显示在工具块中（它有自己的交互卡片）
     if (tc.name === 'ask_user') return ''
 
-    const icon = { run_command: '⚡', write_file: '✏️', read_file: '📄', list_directory: '📂', get_system_info: '💻', list_processes: '📊', check_port: '🔌' }[tc.name] || '🔧'
+    const tcIcon = { run_command: icon('terminal', 14), write_file: icon('edit', 14), read_file: icon('file', 14), list_directory: icon('folder', 14), get_system_info: icon('monitor', 14), list_processes: icon('list', 14), check_port: icon('plug', 14) }[tc.name] || icon('wrench', 14)
     const label = { run_command: '执行命令', read_file: '读取文件', write_file: '写入文件', list_directory: '列出目录', get_system_info: '系统信息', list_processes: '进程列表', check_port: '端口检测' }[tc.name] || tc.name
     const argsStr = tc.name === 'run_command' ? escHtml(tc.args.command || '')
       : tc.name === 'read_file' ? escHtml(tc.args.path || '')
@@ -1837,6 +2131,89 @@ function renderToolBlocks(toolHistory) {
   }).join('')
 }
 
+// ── 错误上下文 Banner ──
+
+function checkErrorContext() {
+  const raw = sessionStorage.getItem('assistant-error-context')
+  if (!raw) return
+  try {
+    _errorContext = JSON.parse(raw)
+    // 不立即移除 sessionStorage，等用户操作后再移除
+  } catch { _errorContext = null }
+}
+
+function clearErrorContext() {
+  _errorContext = null
+  sessionStorage.removeItem('assistant-error-context')
+  _messagesEl?.querySelector('.ast-error-banner')?.remove()
+}
+
+function renderErrorBanner() {
+  if (!_errorContext || !_messagesEl) return
+  // 避免重复
+  if (_messagesEl.querySelector('.ast-error-banner')) return
+
+  const ctx = _errorContext
+  const banner = document.createElement('div')
+  banner.className = 'ast-error-banner'
+  banner.innerHTML = `
+    <div class="ast-error-banner-header">
+      <span class="ast-error-banner-icon">${statusIcon('warn', 18)}</span>
+      <span class="ast-error-banner-title">${escHtml(ctx.title)}</span>
+      <div class="ast-error-banner-actions">
+        <button class="btn-analyze">让 AI 分析</button>
+        <button class="btn-dismiss">忽略</button>
+      </div>
+    </div>
+    ${ctx.hint ? `<div class="ast-error-banner-hint">${escHtml(ctx.hint)}</div>` : ''}
+    ${ctx.error ? `
+      <button class="ast-error-toggle">查看详细日志 ▼</button>
+      <div class="ast-error-banner-detail">
+        <pre>${escHtml(ctx.error)}</pre>
+      </div>
+    ` : ''}
+  `
+
+  // 展开/折叠详细日志
+  const toggleBtn = banner.querySelector('.ast-error-toggle')
+  const detailEl = banner.querySelector('.ast-error-banner-detail')
+  if (toggleBtn && detailEl) {
+    toggleBtn.addEventListener('click', () => {
+      const expanded = detailEl.classList.toggle('expanded')
+      toggleBtn.textContent = expanded ? '收起日志 ▲' : '查看详细日志 ▼'
+    })
+  }
+
+  // "让 AI 分析" → 组装 prompt 并发送
+  banner.querySelector('.btn-analyze').addEventListener('click', () => {
+    const prompt = [
+      ctx.scene ? `**场景**: ${ctx.scene}` : '',
+      ctx.title ? `**错误**: ${ctx.title}` : '',
+      ctx.hint ? `**提示**: ${ctx.hint}` : '',
+      ctx.error ? `\n\`\`\`\n${ctx.error}\n\`\`\`` : '',
+      '\n请分析以上错误信息，给出原因和修复方案。',
+    ].filter(Boolean).join('\n')
+
+    // 自动切换到执行模式
+    if (currentMode() === 'chat') {
+      _config.mode = 'execute'
+      saveConfig()
+      _page?.querySelectorAll('.ast-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'execute'))
+    }
+
+    clearErrorContext()
+    sendMessage(prompt)
+  })
+
+  // "忽略" → 移除 banner 和上下文
+  banner.querySelector('.btn-dismiss').addEventListener('click', () => {
+    clearErrorContext()
+  })
+
+  // 插入到消息区域顶部
+  _messagesEl.insertBefore(banner, _messagesEl.firstChild)
+}
+
 function renderMessages() {
   const session = getCurrentSession()
   if (!_messagesEl) return
@@ -1861,9 +2238,12 @@ function renderMessages() {
         </div>
         <h3>${_config?.assistantName || DEFAULT_NAME}</h3>
         <p>我可以帮你分析日志、排查问题、配置 OpenClaw。<br>点击下方技能卡片，AI 会自动调用工具完成任务。</p>
+        ${getAssistantGuideHtml()}
         <div class="ast-skills-grid">${skillCards}</div>
       </div>
     `
+    // 在欢迎页也显示错误 banner
+    if (_errorContext) renderErrorBanner()
     return
   }
 
@@ -1925,7 +2305,7 @@ function buildTestResult({ success, elapsed, usedApi, reqUrl, reqBody, respStatu
   } else if (success) {
     html += `<span style="color:var(--success)">✓ 模型回复成功 (${elapsed}ms, ${usedApi} API)</span>`
   } else {
-    html += `<span style="color:var(--warning)">⚠ HTTP ${respStatus} — 请求完成但未解析到回复内容</span>`
+    html += `<span style="color:var(--warning)">${statusIcon('warn', 14)} HTTP ${respStatus} — 请求完成但未解析到回复内容</span>`
   }
   // 回复预览
   if (reply) {
@@ -1960,7 +2340,9 @@ function showSettings() {
         <button class="ast-tab active" data-tab="api">模型配置</button>
         <button class="ast-tab" data-tab="tools">工具权限</button>
         <button class="ast-tab" data-tab="persona">助手人设</button>
+        <button class="ast-tab" data-tab="knowledge">知识库</button>
       </div>
+      <div class="modal-body">
       <div class="ast-settings-form">
         <div class="ast-tab-panel active" data-panel="api">
           <div style="display:flex;gap:10px">
@@ -1983,6 +2365,7 @@ function showSettings() {
             <div style="display:flex;gap:6px;padding-bottom:1px">
               <button class="btn btn-sm btn-secondary" id="ast-btn-test" title="测试连通性">测试</button>
               <button class="btn btn-sm btn-secondary" id="ast-btn-models" title="从 API 获取可用模型">拉取</button>
+              <button class="btn btn-sm btn-secondary" id="ast-btn-import" title="从 OpenClaw 导入模型配置">${icon('download', 14)} 导入</button>
             </div>
           </div>
           <div id="ast-test-result" style="margin:6px 0 2px;font-size:12px;min-height:16px"></div>
@@ -2004,6 +2387,41 @@ function showSettings() {
             anthropic: '使用 Anthropic Messages API（/v1/messages）',
             'google-gemini': '使用 Gemini generateContent API',
           }[c.apiType || 'openai']}</div>
+
+          <div id="ast-qtcool-promo" style="margin-top:14px;border-radius:12px;background:linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%);color:#fff;position:relative;overflow:hidden;box-shadow:0 4px 20px rgba(48,43,99,0.3)">
+            <div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,0.15) 0%,transparent 70%);pointer-events:none"></div>
+            <div style="position:absolute;bottom:-20px;left:-20px;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,0.1) 0%,transparent 70%);pointer-events:none"></div>
+            <div style="padding:16px 18px 12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                <span style="font-size:16px">${icon('gift', 18)}</span>
+                <span style="font-weight:700;font-size:14px;letter-spacing:0.3px">ClawPanel 公益 AI 接口计划</span>
+              </div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.7);line-height:1.6;margin-bottom:12px">
+                Token 费用？我们帮你出了。调用成本由项目组内部承担，GPT-5 全系列模型开箱即用，无需注册、无需付费。选模型，一键接入。
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="ast-qtcool-model" style="padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.08);color:#fff;font-size:12px;outline:none;cursor:pointer;backdrop-filter:blur(4px);min-width:140px">
+                  <option value="" disabled selected style="color:#333">加载模型列表...</option>
+                </select>
+                <button class="btn btn-sm" id="ast-qtcool-test" style="background:rgba(255,255,255,0.12);color:#fff;font-weight:500;border:1px solid rgba(255,255,255,0.2);font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer">${icon('search', 12)} 测试</button>
+                <button class="btn btn-sm" id="ast-qtcool-apply" style="background:linear-gradient(135deg,#6366f1,#a855f7);color:#fff;font-weight:600;border:none;font-size:12px;padding:6px 16px;border-radius:8px;box-shadow:0 2px 8px rgba(99,102,241,0.4);transition:transform 0.15s;cursor:pointer">${icon('zap', 12)} 一键接入</button>
+              </div>
+              <div id="ast-qtcool-status" style="margin-top:8px;font-size:11px;min-height:16px;line-height:1.5"></div>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,0.08);padding:10px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;background:rgba(0,0,0,0.15)">
+              <label style="cursor:pointer;display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,0.5)">
+                <input type="checkbox" id="ast-qtcool-customkey" style="accent-color:#a855f7;width:13px;height:13px"> 使用自定义密钥
+              </label>
+              <div style="display:flex;gap:12px;font-size:11px">
+                <a href="https://gpt.qt.cool/checkin" target="_blank" style="color:rgba(168,133,247,0.9);text-decoration:none">${icon('target', 12)} 签到领密钥</a>
+                <a id="ast-qtcool-usage" href="${QTCOOL.usageUrl}${QTCOOL.defaultKey}" target="_blank" style="color:rgba(168,133,247,0.9);text-decoration:none">${icon('bar-chart', 12)} 用量查询</a>
+                <a href="https://claw.qt.cool/" target="_blank" style="color:rgba(168,133,247,0.9);text-decoration:none">${icon('home', 12)} 官网</a>
+              </div>
+            </div>
+            <div id="ast-qtcool-keyrow" style="display:none;border-top:1px solid rgba(255,255,255,0.08);padding:10px 18px;background:rgba(0,0,0,0.1)">
+              <input class="form-input" id="ast-qtcool-key" placeholder="粘贴你的独立密钥（签到可得）" style="font-size:12px;padding:6px 10px;background:rgba(255,255,255,0.08);color:#fff;border:1px solid rgba(255,255,255,0.15);border-radius:8px">
+            </div>
+          </div>
         </div>
         <div class="ast-tab-panel" data-panel="tools">
           <div class="form-hint" style="margin-bottom:10px">工具开关优先级高于模式设置。关闭的工具在任何模式下都不可用。</div>
@@ -2017,19 +2435,86 @@ function showSettings() {
             <input type="checkbox" id="ast-tool-fileops" ${c.tools?.fileOps !== false ? 'checked' : ''}>
             <span class="ast-switch-track"></span>
           </label>
+          <label class="ast-switch-row">
+            <span>联网搜索 <span style="color:var(--text-tertiary);font-size:11px">— 允许搜索互联网和抓取网页</span></span>
+            <input type="checkbox" id="ast-tool-websearch" ${c.tools?.webSearch !== false ? 'checked' : ''}>
+            <span class="ast-switch-track"></span>
+          </label>
           <div class="form-hint" style="margin-top:10px">进程列表、端口检测、系统信息工具始终可用（非聊天模式下）。</div>
         </div>
         <div class="ast-tab-panel" data-panel="persona">
           <div class="form-group">
-            <label class="form-label">助手名称</label>
-            <input class="form-input" id="ast-name" value="${escHtml(c.assistantName || DEFAULT_NAME)}" placeholder="${DEFAULT_NAME}">
+            <label class="form-label">身份来源</label>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="radio" name="ast-soul-source" value="default" ${!c.soulSource || c.soulSource === 'default' ? 'checked' : ''}>
+                <span>ClawPanel 默认人设</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                <input type="radio" name="ast-soul-source" value="openclaw" ${c.soulSource?.startsWith('openclaw:') ? 'checked' : ''}>
+                <span>OpenClaw Agent 身份 <span style="font-size:11px;color:var(--text-tertiary)">（借尸还魂）</span></span>
+              </label>
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">助手性格</label>
-            <textarea class="form-input" id="ast-personality" rows="3" placeholder="${DEFAULT_PERSONALITY}" style="resize:vertical">${escHtml(c.assistantPersonality || DEFAULT_PERSONALITY)}</textarea>
-            <div class="form-hint">描述助手的说话风格和行为方式，会注入到系统提示词中</div>
+          <div id="ast-soul-default" style="${c.soulSource?.startsWith('openclaw:') ? 'display:none' : ''}">
+            <div class="form-group">
+              <label class="form-label">助手名称</label>
+              <input class="form-input" id="ast-name" value="${escHtml(c.assistantName || DEFAULT_NAME)}" placeholder="${DEFAULT_NAME}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">助手性格</label>
+              <textarea class="form-input" id="ast-personality" rows="3" placeholder="${DEFAULT_PERSONALITY}" style="resize:vertical">${escHtml(c.assistantPersonality || DEFAULT_PERSONALITY)}</textarea>
+              <div class="form-hint">描述助手的说话风格和行为方式，会注入到系统提示词中</div>
+            </div>
+          </div>
+          <div id="ast-soul-openclaw" style="${c.soulSource?.startsWith('openclaw:') ? '' : 'display:none'}">
+            <div class="form-group" style="margin-top:4px">
+              <label class="form-label">选择 Agent</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="form-input" id="ast-soul-agent" style="flex:1;font-family:var(--font-mono);font-size:13px">
+                  <option value="" disabled>扫描中...</option>
+                </select>
+                <button class="btn btn-sm btn-primary" id="ast-btn-load-soul" style="gap:4px;white-space:nowrap">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+                  加载灵魂
+                </button>
+                <button class="btn btn-sm btn-ghost" id="ast-btn-refresh-soul" style="gap:4px;white-space:nowrap" title="重新扫描 Agent 列表">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="ast-soul-status" class="ast-soul-card" style="margin-top:8px">
+              <div style="text-align:center;padding:16px 0;color:var(--text-tertiary);font-size:12px">
+                选择 Agent 后点击「加载灵魂」读取身份文件
+              </div>
+            </div>
+            <div class="form-hint" style="margin-top:8px">附身后助手将继承 Agent 的人格、记忆和用户偏好，同时保留 ClawPanel 的工具能力。</div>
           </div>
         </div>
+        <div class="ast-tab-panel" data-panel="knowledge">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div class="form-hint" style="margin:0">为助手添加自定义知识，对话时会自动注入到系统提示词中。</div>
+            <button class="btn btn-sm btn-primary" id="ast-kb-add" style="gap:4px;white-space:nowrap">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              添加
+            </button>
+          </div>
+          <div id="ast-kb-editor" style="display:none;margin-bottom:10px">
+            <div class="form-group" style="margin-bottom:6px">
+              <input class="form-input" id="ast-kb-name" placeholder="知识名称，如：产品文档、API参考" style="font-size:13px">
+            </div>
+            <div class="form-group" style="margin-bottom:6px">
+              <textarea class="form-input" id="ast-kb-content" rows="6" placeholder="粘贴知识内容（支持 Markdown 格式）..." style="resize:vertical;font-size:12px;font-family:var(--font-mono)"></textarea>
+            </div>
+            <div style="display:flex;gap:6px;justify-content:flex-end">
+              <button class="btn btn-sm btn-secondary" id="ast-kb-cancel">取消</button>
+              <button class="btn btn-sm btn-primary" id="ast-kb-save">保存知识</button>
+            </div>
+          </div>
+          <div class="ast-soul-card" id="ast-kb-list"></div>
+          <div class="form-hint" style="margin-top:8px" id="ast-kb-hint"></div>
+        </div>
+      </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary btn-sm" data-action="cancel">取消</button>
@@ -2063,6 +2548,312 @@ function showSettings() {
     baseUrlInput.placeholder = placeholders[v] || placeholders.openai
     apiKeyInput.placeholder = keyPlaceholders[v] || keyPlaceholders.openai
   })
+
+  // 灵魂来源切换
+  const agentSelect = overlay.querySelector('#ast-soul-agent')
+  overlay.querySelectorAll('input[name="ast-soul-source"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const isOpenclaw = radio.value === 'openclaw' && radio.checked
+      overlay.querySelector('#ast-soul-default').style.display = isOpenclaw ? 'none' : ''
+      overlay.querySelector('#ast-soul-openclaw').style.display = isOpenclaw ? '' : 'none'
+      if (isOpenclaw) refreshAgentList()
+    })
+  })
+
+  // 扫描并填充 Agent 下拉列表
+  const refreshAgentList = async () => {
+    agentSelect.innerHTML = '<option value="" disabled selected>扫描中...</option>'
+    agentSelect.disabled = true
+    const agents = await scanOpenClawAgents()
+    agentSelect.innerHTML = ''
+    if (agents.length === 0) {
+      agentSelect.innerHTML = '<option value="" disabled selected>未发现 Agent</option>'
+      agentSelect.disabled = true
+      return
+    }
+    let currentId = _config.soulSource?.replace('openclaw:', '') || 'default'
+    if (currentId === 'main') currentId = 'default'
+    for (const a of agents) {
+      const opt = document.createElement('option')
+      opt.value = a.id
+      opt.textContent = a.label + (a.hasWorkspace ? '' : ' (无 workspace)')
+      if (!a.hasWorkspace) opt.disabled = true
+      if (a.id === currentId) opt.selected = true
+      agentSelect.appendChild(opt)
+    }
+    agentSelect.disabled = false
+  }
+
+  // 加载灵魂函数
+  const doLoadSoul = async (btn) => {
+    const selectedAgent = agentSelect.value
+    if (!selectedAgent) { toast('请先选择一个 Agent', 'warning'); return }
+    const statusEl = overlay.querySelector('#ast-soul-status')
+    const origHTML = btn.innerHTML
+    btn.disabled = true
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ast-spin"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"/></svg> 加载中...'
+    statusEl.innerHTML = `<div style="text-align:center;padding:16px 0;color:var(--text-tertiary);font-size:12px">正在读取 Agent「${selectedAgent}」的 workspace...</div>`
+
+    const soul = await loadOpenClawSoul(selectedAgent)
+    btn.disabled = false
+    btn.innerHTML = origHTML
+
+    if (!soul) {
+      statusEl.innerHTML = `<div style="text-align:center;padding:16px 0"><div style="color:var(--error);font-size:12px;font-weight:500">加载失败</div><div style="color:var(--text-tertiary);font-size:11px;margin-top:4px">Agent「${selectedAgent}」的 workspace 不存在或无法访问</div></div>`
+      return
+    }
+
+    statusEl.innerHTML = renderSoulStats(soul)
+  }
+
+  overlay.querySelector('#ast-btn-load-soul').onclick = (e) => doLoadSoul(e.target.closest('button'))
+  // 刷新按钮：重新扫描 Agent 列表
+  overlay.querySelector('#ast-btn-refresh-soul').onclick = (e) => {
+    refreshAgentList()
+    overlay.querySelector('#ast-soul-status').innerHTML = '<div style="text-align:center;padding:16px 0;color:var(--text-tertiary);font-size:12px">选择 Agent 后点击「加载灵魂」读取身份文件</div>'
+  }
+
+  // 打开面板时：如果已选 openclaw 模式，自动扫描 Agent 列表
+  if (_config?.soulSource?.startsWith('openclaw:')) {
+    refreshAgentList().then(() => {
+      // 如果已有缓存，显示统计
+      if (_soulCache) {
+        overlay.querySelector('#ast-soul-status').innerHTML = renderSoulStats(_soulCache)
+      }
+    })
+  }
+
+  // ── 知识库管理 ──
+  const kbListEl = overlay.querySelector('#ast-kb-list')
+  const kbEditorEl = overlay.querySelector('#ast-kb-editor')
+  const kbHintEl = overlay.querySelector('#ast-kb-hint')
+  // 临时副本，保存时写回 _config
+  let kbFiles = JSON.parse(JSON.stringify(_config.knowledgeFiles || []))
+
+  const renderKBList = () => {
+    if (kbFiles.length === 0) {
+      kbListEl.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--text-tertiary);font-size:12px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:6px;opacity:0.4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <div>点击「添加」按钮添加知识文件</div></div>`
+      kbHintEl.textContent = ''
+      return
+    }
+    const totalSize = kbFiles.reduce((s, f) => s + (f.content?.length || 0), 0)
+    const sizeStr = totalSize > 1024 ? (totalSize / 1024).toFixed(1) + ' KB' : totalSize + ' B'
+    const enabledCount = kbFiles.filter(f => f.enabled !== false).length
+    kbHintEl.textContent = `共 ${kbFiles.length} 个知识文件（${enabledCount} 个启用，${sizeStr}），保存后生效。`
+    let html = '<div class="ast-soul-files">'
+    kbFiles.forEach((f, i) => {
+      const fSize = f.content?.length > 1024 ? (f.content.length / 1024).toFixed(1) + ' KB' : (f.content?.length || 0) + ' B'
+      const enabled = f.enabled !== false
+      html += `<div class="ast-soul-file ${enabled ? 'loaded' : 'missing'}" data-kb-idx="${i}" style="cursor:pointer" title="点击编辑">
+        <button style="padding:2px;background:none;border:none;cursor:pointer;flex-shrink:0" data-kb-toggle="${i}" title="${enabled ? '点击禁用' : '点击启用'}">
+          <div class="ast-soul-file-icon">${enabled ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>'}</div>
+        </button>
+        <div class="ast-soul-file-info">
+          <span class="ast-soul-file-name">${escHtml(f.name)}</span>
+          <span class="ast-soul-file-desc">${f.content?.split('\n').length || 0} 行 · 点击编辑</span>
+        </div>
+        <span class="ast-soul-file-size">${fSize}</span>
+        <button class="btn btn-sm" style="padding:2px 6px;font-size:11px;color:var(--error);background:none;border:none;cursor:pointer" data-kb-del="${i}" title="删除">✕</button>
+      </div>`
+    })
+    html += '</div>'
+    kbListEl.innerHTML = html
+  }
+  renderKBList()
+
+  // 添加/编辑状态
+  let kbEditIdx = -1 // -1=新增, >=0=编辑索引
+  const openKBEditor = (idx) => {
+    kbEditIdx = idx
+    kbEditorEl.style.display = ''
+    if (idx >= 0) {
+      overlay.querySelector('#ast-kb-name').value = kbFiles[idx].name
+      overlay.querySelector('#ast-kb-content').value = kbFiles[idx].content
+      overlay.querySelector('#ast-kb-save').textContent = '更新'
+    } else {
+      overlay.querySelector('#ast-kb-name').value = ''
+      overlay.querySelector('#ast-kb-content').value = ''
+      overlay.querySelector('#ast-kb-save').textContent = '保存知识'
+    }
+    overlay.querySelector('#ast-kb-name').focus()
+  }
+  overlay.querySelector('#ast-kb-add').onclick = () => openKBEditor(-1)
+  overlay.querySelector('#ast-kb-cancel').onclick = () => {
+    kbEditorEl.style.display = 'none'
+  }
+  overlay.querySelector('#ast-kb-save').onclick = () => {
+    const name = overlay.querySelector('#ast-kb-name').value.trim()
+    const content = overlay.querySelector('#ast-kb-content').value.trim()
+    if (!name) { toast('请输入知识名称', 'warning'); return }
+    if (!content) { toast('请输入知识内容', 'warning'); return }
+    if (kbEditIdx >= 0) {
+      kbFiles[kbEditIdx].name = name
+      kbFiles[kbEditIdx].content = content
+    } else {
+      kbFiles.push({ name, content, enabled: true })
+    }
+    kbEditorEl.style.display = 'none'
+    renderKBList()
+  }
+  // 点击列表项：编辑/切换启用/删除
+  kbListEl.addEventListener('click', (e) => {
+    const delBtn = e.target.closest('[data-kb-del]')
+    if (delBtn) {
+      e.stopPropagation()
+      const idx = parseInt(delBtn.dataset.kbDel)
+      kbFiles.splice(idx, 1)
+      if (kbEditIdx === idx) kbEditorEl.style.display = 'none'
+      renderKBList()
+      return
+    }
+    const toggleBtn = e.target.closest('[data-kb-toggle]')
+    if (toggleBtn) {
+      e.stopPropagation()
+      const idx = parseInt(toggleBtn.dataset.kbToggle)
+      kbFiles[idx].enabled = kbFiles[idx].enabled === false ? true : false
+      renderKBList()
+      return
+    }
+    const row = e.target.closest('[data-kb-idx]')
+    if (row) {
+      openKBEditor(parseInt(row.dataset.kbIdx))
+    }
+  })
+
+  // ── gpt.qt.cool 一键配置 ──
+  const qtcoolModelSelect = overlay.querySelector('#ast-qtcool-model')
+  const qtcoolCustomKeyCheckbox = overlay.querySelector('#ast-qtcool-customkey')
+  const qtcoolKeyRow = overlay.querySelector('#ast-qtcool-keyrow')
+  const qtcoolKeyInput = overlay.querySelector('#ast-qtcool-key')
+  const qtcoolUsageLink = overlay.querySelector('#ast-qtcool-usage')
+
+  // 动态获取模型列表
+  ;(async () => {
+    let models = QTCOOL.models // fallback
+    try {
+      const resp = await fetch(QTCOOL.baseUrl + '/models', {
+        headers: { 'Authorization': 'Bearer ' + QTCOOL.defaultKey },
+        signal: AbortSignal.timeout(8000)
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.data && data.data.length) {
+          models = data.data.map(m => ({ id: m.id, name: m.id })).sort((a, b) => b.id.localeCompare(a.id))
+        }
+      }
+    } catch { /* use fallback */ }
+    qtcoolModelSelect.innerHTML = models.map((m, i) =>
+      `<option value="${m.id}" style="color:#333"${i === 0 ? ' selected' : ''}>${m.name || m.id}${i === 0 ? ' ★' : ''}</option>`
+    ).join('')
+  })()
+
+  qtcoolCustomKeyCheckbox.onchange = () => {
+    qtcoolKeyRow.style.display = qtcoolCustomKeyCheckbox.checked ? '' : 'none'
+    if (qtcoolCustomKeyCheckbox.checked) qtcoolKeyInput.focus()
+  }
+  qtcoolKeyInput.oninput = () => {
+    const key = qtcoolKeyInput.value.trim()
+    qtcoolUsageLink.href = QTCOOL.usageUrl + (key || QTCOOL.defaultKey)
+  }
+  const qtcoolStatus = overlay.querySelector('#ast-qtcool-status')
+
+  // 测试按钮：快速验证接口可用性
+  overlay.querySelector('#ast-qtcool-test').onclick = async (e) => {
+    const btn = e.target
+    const selectedModel = qtcoolModelSelect.value
+    if (!selectedModel) { qtcoolStatus.innerHTML = `<span style="color:#fbbf24">${statusIcon('warn', 14)} 请先选择模型</span>`; return }
+    const customKey = qtcoolCustomKeyCheckbox.checked ? qtcoolKeyInput.value.trim() : ''
+    const key = customKey || QTCOOL.defaultKey
+
+    btn.disabled = true
+    btn.textContent = '测试中...'
+    qtcoolStatus.innerHTML = '<span style="color:rgba(255,255,255,0.5)">正在连接 GPT-AI 网关...</span>'
+    const t0 = Date.now()
+    try {
+      const resp = await fetch(QTCOOL.baseUrl + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        body: JSON.stringify({ model: selectedModel, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 10 }),
+        signal: AbortSignal.timeout(15000)
+      })
+      const ms = Date.now() - t0
+      if (resp.ok) {
+        const data = await resp.json()
+        const reply = data.choices?.[0]?.message?.content || ''
+        qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} 测试通过（${(ms/1000).toFixed(1)}s）</span><span style="color:rgba(255,255,255,0.4);margin-left:6px">${selectedModel} 响应正常</span>`
+      } else {
+        const errText = await resp.text().catch(() => '')
+        qtcoolStatus.innerHTML = `<span style="color:#f87171">${statusIcon('err', 14)} 测试失败（HTTP ${resp.status}）</span><span style="color:rgba(255,255,255,0.4);margin-left:6px">${errText.slice(0, 80)}</span>`
+      }
+    } catch (err) {
+      qtcoolStatus.innerHTML = `<span style="color:#f87171">${statusIcon('err', 14)} 连接失败：${err.message}</span>`
+    }
+    btn.disabled = false
+    btn.innerHTML = `${icon('search', 12)} 测试`
+  }
+
+  // 一键接入：填充配置 + 提示设为 OpenClaw 主模型
+  overlay.querySelector('#ast-qtcool-apply').onclick = async () => {
+    const selectedModel = qtcoolModelSelect.value
+    if (!selectedModel) { qtcoolStatus.innerHTML = `<span style="color:#fbbf24">${statusIcon('warn', 14)} 请先选择模型</span>`; return }
+    const customKey = qtcoolCustomKeyCheckbox.checked ? qtcoolKeyInput.value.trim() : ''
+    const key = customKey || QTCOOL.defaultKey
+
+    // 1) 填充助手配置
+    overlay.querySelector('#ast-baseurl').value = QTCOOL.baseUrl
+    overlay.querySelector('#ast-apikey').value = key
+    overlay.querySelector('#ast-model').value = selectedModel
+    overlay.querySelector('#ast-apitype').value = 'openai'
+    qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} 助手已配置为 ${selectedModel}</span>`
+    toast('助手已接入 gpt.qt.cool — ' + selectedModel, 'success')
+
+    // 2) 提示是否同步写入 OpenClaw 配置（设为主模型）
+    const yes = await showConfirm(
+      '同步到 OpenClaw？',
+      `是否将 qtcool/${selectedModel} 设为 OpenClaw 主模型？\n\n这将把 gpt.qt.cool 添加为模型服务商，并设置 ${selectedModel} 为全局主模型，AI 助手和所有渠道都将使用该模型。`,
+      { confirmText: '设为主模型', cancelText: '仅配置助手' }
+    )
+    if (yes) {
+      try {
+        let config = {}
+        try { config = await api.readOpenclawConfig() } catch {}
+        if (!config.models) config.models = {}
+        if (!config.models.providers) config.models.providers = {}
+
+        // 添加/更新 qtcool provider
+        if (!config.models.providers.qtcool) {
+          config.models.providers.qtcool = {
+            baseUrl: QTCOOL.baseUrl,
+            apiKey: key,
+            api: 'openai-completions',
+            models: QTCOOL.models.map(m => ({ id: m.id, name: m.name, contextWindow: 128000, reasoning: m.id.includes('codex') }))
+          }
+        } else {
+          config.models.providers.qtcool.apiKey = key
+        }
+
+        // 设为主模型
+        if (!config.agents) config.agents = {}
+        if (!config.agents.defaults) config.agents.defaults = {}
+        if (!config.agents.defaults.model) config.agents.defaults.model = {}
+        config.agents.defaults.model.primary = 'qtcool/' + selectedModel
+
+        await api.writeOpenclawConfig(config)
+        qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} 已设为主模型 qtcool/${selectedModel}，正在重启 Gateway...</span>`
+        try {
+          await api.restartGateway()
+          toast('OpenClaw 主模型已切换为 qtcool/' + selectedModel, 'success')
+          qtcoolStatus.innerHTML = `<span style="color:#34d399">${statusIcon('ok', 14)} 全部完成！主模型：qtcool/${selectedModel}</span>`
+        } catch (e) {
+          toast('配置已保存，Gateway 重启失败: ' + e.message, 'warning')
+        }
+      } catch (e) {
+        toast('写入 OpenClaw 配置失败: ' + e, 'error')
+      }
+    }
+  }
 
   const resultEl = overlay.querySelector('#ast-test-result')
   const modelInput = overlay.querySelector('#ast-model')
@@ -2233,6 +3024,113 @@ function showSettings() {
     }
   }
 
+  // 从 OpenClaw 导入模型配置
+  overlay.querySelector('#ast-btn-import').onclick = async (e) => {
+    const btn = e.target
+    btn.disabled = true
+    btn.textContent = '扫描中...'
+    resultEl.innerHTML = '<span style="color:var(--text-tertiary)">正在扫描 OpenClaw 模型配置...</span>'
+
+    try {
+      const sysInfo = await api.assistantSystemInfo()
+      const home = sysInfo.match(/主目录[:：]\s*(.+)/)?.[1]?.trim() || sysInfo.match(/Home[:：]\s*(.+)/)?.[1]?.trim() || ''
+      if (!home) throw new Error('无法获取主目录路径')
+
+      const providers = []
+
+      // 扫描 agents/*/agent/models.json
+      try {
+        const agentsList = await api.assistantListDir(home + '/.openclaw/agents')
+        const agentIds = agentsList.split('\n').map(l => l.replace(/\/$/, '').trim()).filter(Boolean)
+        for (const agentId of agentIds) {
+          try {
+            const raw = await api.assistantReadFile(home + '/.openclaw/agents/' + agentId + '/agent/models.json')
+            const data = JSON.parse(raw)
+            for (const [pid, p] of Object.entries(data.providers || {})) {
+              if (p.baseUrl && p.apiKey) {
+                providers.push({
+                  source: 'Agent: ' + agentId,
+                  name: pid,
+                  baseUrl: p.baseUrl,
+                  apiKey: p.apiKey,
+                  apiType: 'openai',
+                  models: (p.models || []).map(m => m.id || m.name).filter(Boolean),
+                })
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+
+      // 扫描全局 openclaw.json
+      try {
+        const raw = await api.assistantReadFile(home + '/.openclaw/openclaw.json')
+        const config = JSON.parse(raw)
+        for (const [pid, p] of Object.entries(config.models?.providers || {})) {
+          if (p.baseUrl && p.apiKey && !providers.find(x => x.name === pid)) {
+            providers.push({
+              source: '全局配置',
+              name: pid,
+              baseUrl: p.baseUrl,
+              apiKey: p.apiKey,
+              apiType: 'openai',
+              models: [],
+            })
+          }
+        }
+      } catch {}
+
+      if (providers.length === 0) {
+        resultEl.innerHTML = '<span style="color:var(--warning)">未发现 OpenClaw 模型配置。请先安装并配置 OpenClaw。</span>'
+        return
+      }
+
+      // 构建选择 UI
+      const listHtml = providers.map((p, i) => {
+        const modelsStr = p.models.length ? p.models.join(', ') : '(无模型列表)'
+        return `<div class="ast-import-option" data-idx="${i}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background 0.15s">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong>${escHtml(p.name)}</strong>
+            <span style="font-size:11px;color:var(--text-tertiary)">${escHtml(p.source)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">${escHtml(p.baseUrl)}</div>
+          <div style="font-size:11px;color:var(--text-tertiary);margin-top:1px">模型: ${escHtml(modelsStr)}</div>
+        </div>`
+      }).join('')
+
+      resultEl.innerHTML = `<div style="margin-top:4px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px">检测到 ${providers.length} 个服务商，点击选择：</div>
+        ${listHtml}
+      </div>`
+
+      // 点击选择后填充
+      resultEl.querySelectorAll('.ast-import-option').forEach(el => {
+        el.addEventListener('mouseenter', () => el.style.background = 'var(--bg-secondary)')
+        el.addEventListener('mouseleave', () => el.style.background = '')
+        el.addEventListener('click', () => {
+          const p = providers[parseInt(el.dataset.idx)]
+          overlay.querySelector('#ast-baseurl').value = p.baseUrl
+          overlay.querySelector('#ast-apikey').value = p.apiKey
+          overlay.querySelector('#ast-apitype').value = p.apiType
+          if (p.models.length > 0) {
+            overlay.querySelector('#ast-model').value = p.models[0]
+            // 填充模型下拉列表
+            dropdown.innerHTML = p.models.map(m =>
+              '<div class="ast-model-option" data-model="' + escHtml(m) + '">' + escHtml(m) + '</div>'
+            ).join('')
+          }
+          resultEl.innerHTML = '<span style="color:var(--success)">✓ 已导入「' + escHtml(p.name) + '」的配置' + (p.models.length ? '（' + p.models.length + ' 个模型）' : '') + '</span>'
+        })
+      })
+
+    } catch (err) {
+      resultEl.innerHTML = '<span style="color:var(--error)">导入失败: ' + escHtml(err.message || String(err)) + '</span>'
+    } finally {
+      btn.disabled = false
+      btn.innerHTML = `${icon('download', 14)} 导入`
+    }
+  }
+
   // 模型下拉选择
   dropdown.addEventListener('click', (e) => {
     const opt = e.target.closest('.ast-model-option')
@@ -2265,11 +3163,35 @@ function showSettings() {
     // 工具开关
     _config.tools.terminal = overlay.querySelector('#ast-tool-terminal').checked
     _config.tools.fileOps = overlay.querySelector('#ast-tool-fileops').checked
+    _config.tools.webSearch = overlay.querySelector('#ast-tool-websearch').checked
+    // 灵魂来源
+    const soulRadio = overlay.querySelector('input[name="ast-soul-source"]:checked')
+    if (soulRadio?.value === 'openclaw') {
+      const selectedAgent = overlay.querySelector('#ast-soul-agent')?.value || 'main'
+      _config.soulSource = 'openclaw:' + selectedAgent
+    } else {
+      _config.soulSource = 'default'
+      _soulCache = null
+    }
+    // 知识库
+    _config.knowledgeFiles = kbFiles
     saveConfig()
     overlay.remove()
     // 更新 Header 标题和欢迎页
     const titleEl = _page.querySelector('.ast-title')
-    if (titleEl) titleEl.textContent = _config.assistantName
+    if (titleEl) {
+      // 灵魂移植模式下，尝试从 IDENTITY.md 提取名称
+      let displayName = _config.assistantName
+      if (_config.soulSource?.startsWith('openclaw:') && _soulCache?.identity) {
+        const nameMatch = _soulCache.identity.match(/\*\*Name:\*\*\s*(.+)/i) || _soulCache.identity.match(/名[字称][:：]\s*(.+)/i)
+        const extracted = nameMatch?.[1]?.trim()
+        // 跳过占位符文本（模板未填写时的默认值）
+        if (extracted && !extracted.startsWith('_') && !extracted.startsWith('（') && extracted.length < 30) {
+          displayName = extracted
+        }
+      }
+      titleEl.textContent = displayName
+    }
     renderMessages()
     toast('设置已保存', 'info')
     updateModelBadge()
@@ -2436,8 +3358,8 @@ async function sendMessageDirect(text) {
       setSessionStatus(session.id, 'error')
       // 保留已有内容，追加错误信息和重试按钮
       const errInfo = aiMsg.content
-        ? `\n\n---\n❌ **请求中断**: ${err.message}`
-        : `❌ ${err.message}`
+        ? `\n\n---\n**请求中断**: ${err.message}`
+        : err.message
       aiMsg.content += errInfo
       aiMsg._canRetry = true
     }
@@ -2554,8 +3476,8 @@ async function retryAIResponse(session) {
     } else {
       setSessionStatus(session.id, 'error')
       aiMsg.content += aiMsg.content
-        ? `\n\n---\n❌ **请求中断**: ${err.message}`
-        : `❌ ${err.message}`
+        ? `\n\n---\n**请求中断**: ${err.message}`
+        : err.message
       aiMsg._canRetry = true
     }
     renderMessages()
@@ -2607,8 +3529,10 @@ async function retryAIResponse(session) {
 }
 
 function stopStreaming() {
+  _isStreaming = false
   if (_abortController) {
     _abortController.abort()
+    _abortController = null
   }
 }
 
@@ -2690,6 +3614,22 @@ function showDebugModal(title, content) {
     navigator.clipboard.writeText(content).then(() => toast('已复制'))
   }
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove() })
+}
+
+const AST_GUIDE_KEY = 'clawpanel-guide-assistant-dismissed'
+
+function getAssistantGuideHtml() {
+  if (localStorage.getItem(AST_GUIDE_KEY)) return ''
+  return `
+    <div class="ast-page-guide" id="ast-page-guide">
+      <div class="ast-guide-badge">内置 AI</div>
+      <div class="ast-guide-text">
+        <b>这是 ClawPanel 内置的 AI 助手</b>，独立于 OpenClaw，使用你在右上角「设置」中配置的 API。
+        <span style="opacity:0.6">如需与 OpenClaw Agent 对话，请前往「实时聊天」页面。</span>
+      </div>
+      <button class="ast-guide-close" onclick="localStorage.setItem('${AST_GUIDE_KEY}','1');this.closest('.ast-page-guide').remove()">&times;</button>
+    </div>
+  `
 }
 
 // ── 工具函数 ──
@@ -2805,6 +3745,17 @@ export async function render() {
     // 延迟发送，确保页面渲染完成
     setTimeout(() => sendMessage(autoPrompt), 300)
   }
+
+  // 检查是否有错误上下文待处理（显示 banner，不自动发送）
+  checkErrorContext()
+  if (_errorContext) {
+    setTimeout(() => renderErrorBanner(), 100)
+  }
+  // 监听实时错误注入（用户已在助手页面时，其他页面发生错误）
+  window.addEventListener('assistant-error-injected', () => {
+    checkErrorContext()
+    if (_errorContext) renderErrorBanner()
+  })
 
   // ── 事件绑定 ──
 
@@ -3007,7 +3958,7 @@ export async function render() {
         _config.mode = 'execute'
         saveConfig()
         page.querySelectorAll('.ast-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === 'execute'))
-        toast('已自动切换到 🚀 执行模式', 'info')
+        toast('已自动切换到执行模式', 'info')
       }
 
       sendMessage(skill.prompt)
@@ -3031,6 +3982,7 @@ function autoResize(textarea) {
 
 export function cleanup() {
   flushSave()
+  stopStreaming()
   stopStreamRefresh()
   _pendingImages = []
   _page = null

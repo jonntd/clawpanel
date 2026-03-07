@@ -53,7 +53,12 @@ fn build_enhanced_path() -> String {
             format!("{}/.volta/bin", home.display()),
             format!("{}/.nodenv/shims", home.display()),
             format!("{}/n/bin", home.display()),
+            format!("{}/.npm-global/bin", home.display()),
         ];
+        // NPM_CONFIG_PREFIX: 用户通过 npm config set prefix 自定义的全局安装路径
+        if let Ok(prefix) = std::env::var("NPM_CONFIG_PREFIX") {
+            extra.push(format!("{}/bin", prefix));
+        }
         // 扫描 nvm 实际安装的版本目录（兼容无 current 符号链接的情况）
         let nvm_versions = home.join(".nvm/versions/node");
         if nvm_versions.is_dir() {
@@ -104,7 +109,12 @@ fn build_enhanced_path() -> String {
             format!("{}/.volta/bin", home.display()),
             format!("{}/.nodenv/shims", home.display()),
             format!("{}/n/bin", home.display()),
+            format!("{}/.npm-global/bin", home.display()),
         ];
+        // NPM_CONFIG_PREFIX: 用户通过 npm config set prefix 自定义的全局安装路径
+        if let Ok(prefix) = std::env::var("NPM_CONFIG_PREFIX") {
+            extra.push(format!("{}/bin", prefix));
+        }
         // NVM_DIR 环境变量（用户可能自定义了 nvm 安装目录）
         let nvm_dir = std::env::var("NVM_DIR")
             .ok()
