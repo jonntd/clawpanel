@@ -697,10 +697,13 @@ const handlers = {
     const logPath = path.join(LOGS_DIR, file)
     if (!fs.existsSync(logPath)) return ''
     try {
-      return execSync(`tail -${lines} "${logPath}" 2>&1`, { windowsHide: true }).toString()
-    } catch {
-      const content = fs.readFileSync(logPath, 'utf8')
+      // 使用 Buffer 读取，避免 UTF-8 编码错误
+      const buffer = fs.readFileSync(logPath)
+      const content = buffer.toString('utf8')
       return content.split('\n').slice(-lines).join('\n')
+    } catch (e) {
+      console.error('读取日志失败:', e)
+      return ''
     }
   },
 
@@ -712,11 +715,17 @@ const handlers = {
     const file = logFiles[logName] || logFiles['gateway']
     const logPath = path.join(LOGS_DIR, file)
     if (!fs.existsSync(logPath)) return []
-    // 纯 JS 实现，避免 shell 命令注入
-    const content = fs.readFileSync(logPath, 'utf8')
-    const queryLower = (query || '').toLowerCase()
-    const matched = content.split('\n').filter(line => line.toLowerCase().includes(queryLower))
-    return matched.slice(-maxResults)
+    try {
+      // 使用 Buffer 读取，避免 UTF-8 编码错误
+      const buffer = fs.readFileSync(logPath)
+      const content = buffer.toString('utf8')
+      const queryLower = (query || '').toLowerCase()
+      const matched = content.split('\n').filter(line => line.toLowerCase().includes(queryLower))
+      return matched.slice(-maxResults)
+    } catch (e) {
+      console.error('搜索日志失败:', e)
+      return []
+    }
   },
 
   // Agent 管理

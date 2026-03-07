@@ -4,6 +4,11 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
+/// 将字节序列转换为有效的 UTF-8 字符串，替换无效字符
+fn bytes_to_string(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
 fn log_dir() -> PathBuf {
     dirs::home_dir()
         .unwrap_or_default()
@@ -45,9 +50,11 @@ pub fn read_log_tail(log_name: String, lines: Option<u32>) -> Result<String, Str
     file.seek(SeekFrom::Start(start_pos))
         .map_err(|e| format!("Seek 失败: {e}"))?;
 
-    let mut buf = String::new();
-    file.read_to_string(&mut buf)
+    // 读取为字节然后转换为字符串，处理无效 UTF-8 字符
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
         .map_err(|e| format!("读取日志失败: {e}"))?;
+    let buf = bytes_to_string(&bytes);
 
     let mut all_lines: Vec<&str> = buf.lines().collect();
 
@@ -92,12 +99,17 @@ pub fn search_log(
     file.seek(SeekFrom::Start(start_pos))
         .map_err(|e| format!("Seek 失败: {e}"))?;
 
-    let reader = BufReader::new(file);
+    // 读取为字节然后转换为字符串，处理无效 UTF-8 字符
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|e| format!("读取日志失败: {e}"))?;
+    let content = bytes_to_string(&bytes);
+
     let query_lower = query.to_lowercase();
 
-    let mut matched: Vec<String> = reader
+    let mut matched: Vec<String> = content
         .lines()
-        .map_while(Result::ok)
+        .map(|l| l.to_string())
         .filter(|l| l.to_lowercase().contains(&query_lower))
         .collect();
 
