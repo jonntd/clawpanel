@@ -161,9 +161,9 @@ jobs:
           get_logs() {
             local prefix="$1"
             if [ -n "$RANGE" ]; then
-              git log "$RANGE" --pretty=format:"%s" --no-merges | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(] */- /" | head -20
+              git log "$RANGE" --pretty=format:"%s" --no-merges | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(][^)]*[):] */- /" | head -20
             else
-              git log --pretty=format:"%s" --no-merges -30 | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(] */- /" | head -20
+              git log --pretty=format:"%s" --no-merges -30 | { grep -iE "^${prefix}" || true; } | sed "s/^${prefix}[:(][^)]*[):] */- /" | head -20
             fi
           }
 
