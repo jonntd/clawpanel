@@ -106,11 +106,7 @@ jobs:
           # TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           # TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ env.TAG_NAME }}
-          releaseName: "ClawPanel ${{ env.TAG_NAME }}"
-          releaseBody: "正在构建所有平台安装包，请稍候..."
-          releaseDraft: false
-          prerelease: false
+          # 不自动创建 Release，等重新打包后再手动上传
           args: ${{ matrix.platform.args }}
 
       # macOS: 重新打包 DMG，添加安装脚本
@@ -201,22 +197,28 @@ jobs:
 
           echo "DMG 重新打包完成: $ORIGINAL_DMG"
 
-      # 重新上传修改后的 DMG
-      - name: 上传修改后的 DMG
-        if: runner.os == 'macOS' && steps.tauri-build.outputs.artifacts != ''
+      # 上传所有构建产物到 artifact
+      - name: 上传构建产物
+        if: steps.tauri-build.outputs.artifacts != ''
         uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg-${{ matrix.platform.rust_target }}
-          path: src-tauri/target/**/*.dmg
+          name: build-${{ matrix.platform.rust_target }}
+          path: |
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/**/*.deb
+            src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.msi
           if-no-files-found: ignore
 
-  # ── 所有平台构建完成后，统一更新 Release Notes ─────────────────────────────
-  # 独立 job 确保只执行一次，彻底避免多个 matrix job 的竞争条件
-  update-release-notes:
-    name: 更新 Release Notes
+  # ── 所有平台构建完成后，统一创建 Release 并上传产物 ─────────────────────────────
+  create-release:
+    name: 创建 Release
     needs: build
     runs-on: ubuntu-latest
-    if: always() && needs.build.result != 'cancelled'
+    if: always() && needs.build.result == 'success'
     permissions:
       contents: write
 
@@ -235,11 +237,17 @@ jobs:
             echo "TAG_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
           fi
 
-      - name: 生成并更新 Release Notes
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: build-*
+          merge-multiple: true
+
+      - name: 生成 Release Notes 并创建 Release
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_RESULT: ${{ needs.build.result }}
           REPO: ${{ github.repository }}
         run: |
           VERSION="${TAG_NAME#v}"
@@ -290,11 +298,7 @@ jobs:
           fi
 
           # ── 构建状态 ──
-          if [ "$BUILD_RESULT" = "success" ]; then
-            STATUS_BADGE="✅ 全部平台构建成功"
-          else
-            STATUS_BADGE="⚠️ 部分平台构建失败，请查看 [Actions 日志](https://github.com/${REPO}/actions)"
-          fi
+          STATUS_BADGE="✅ 全部平台构建成功"
 
           # ── 写入 Release Notes ──
           {
@@ -345,4 +349,8 @@ jobs:
             echo "📖 [项目主页](https://github.com/${REPO}) · 💬 [反馈问题](https://github.com/${REPO}/issues) · 📣 [QQ 群](https://qt.cool/c/OpenClaw)"
           } > release_body.md
 
-          gh release edit "$TAG_NAME" --notes-file release_body.md
+          # 创建 Release 并上传所有构建产物
+          gh release create "$TAG_NAME" \
+            --title "ClawPanel ${TAG_NAME}" \
+            --notes-file release_body.md \
+            artifacts/**/*
