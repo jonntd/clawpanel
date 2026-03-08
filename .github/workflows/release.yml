@@ -92,6 +92,7 @@ jobs:
 
       - name: 构建 Tauri 应用
         uses: tauri-apps/tauri-action@v0
+        id: tauri-build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS 代码签名（可选）
@@ -111,6 +112,105 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform.args }}
+
+      # macOS: 重新打包 DMG，添加安装脚本
+      - name: 重新打包 macOS DMG（添加安装脚本）
+        if: runner.os == 'macOS' && steps.tauri-build.outputs.artifacts != ''
+        run: |
+          # 安装 create-dmg
+          brew install create-dmg
+
+          # 查找生成的 DMG
+          ORIGINAL_DMG=$(find src-tauri/target -name "*.dmg" -type f | head -1)
+          if [ -z "$ORIGINAL_DMG" ]; then
+            echo "未找到原始 DMG，跳过重新打包"
+            exit 0
+          fi
+
+          echo "原始 DMG: $ORIGINAL_DMG"
+
+          # 挂载原始 DMG
+          MOUNT_POINT=$(hdiutil attach "$ORIGINAL_DMG" -nobrowse -readonly | grep "/Volumes/" | awk '{print $3}')
+          if [ -z "$MOUNT_POINT" ]; then
+            echo "挂载 DMG 失败"
+            exit 1
+          fi
+
+          echo "挂载点: $MOUNT_POINT"
+
+          # 创建临时目录
+          TMP_DIR=$(mktemp -d)
+          DMG_CONTENTS="$TMP_DIR/dmg-contents"
+          mkdir -p "$DMG_CONTENTS"
+
+          # 复制应用
+          cp -R "$MOUNT_POINT"/*.app "$DMG_CONTENTS/"
+
+          # 复制安装脚本
+          cp scripts/install-mac.command "$DMG_CONTENTS/安装ClawPanel.command"
+          chmod +x "$DMG_CONTENTS/安装ClawPanel.command"
+
+          # 创建 Applications 快捷链接
+          ln -s /Applications "$DMG_CONTENTS/Applications"
+
+          # 创建说明文件
+          cat > "$DMG_CONTENTS/说明.txt" << 'EOF'
+ClawPanel 安装说明
+==================
+
+方法1（推荐）: 使用安装脚本
+----------------------------
+双击 "安装ClawPanel.command" 脚本，自动完成安装并移除安全限制
+
+方法2: 手动安装
+----------------
+1. 将 ClawPanel.app 拖到 Applications 文件夹
+2. 打开终端运行: sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app
+3. 从启动台打开 ClawPanel
+
+遇到问题?
+---------
+访问 https://github.com/jonntd/clawpanel/issues 获取帮助
+EOF
+
+          # 卸载原始 DMG
+          hdiutil detach "$MOUNT_POINT"
+
+          # 删除原始 DMG
+          rm "$ORIGINAL_DMG"
+
+          # 创建新的 DMG
+          NEW_DMG="${ORIGINAL_DMG%.dmg}-installer.dmg"
+          create-dmg \
+            --volname "ClawPanel" \
+            --window-pos 200 120 \
+            --window-size 800 450 \
+            --icon-size 100 \
+            --icon "ClawPanel.app" 200 200 \
+            --icon "Applications" 600 200 \
+            --icon "安装ClawPanel.command" 400 100 \
+            --icon "说明.txt" 400 280 \
+            --hide-extension "安装ClawPanel.command" \
+            --app-drop-link 600 200 \
+            "$NEW_DMG" \
+            "$DMG_CONTENTS"
+
+          # 清理
+          rm -rf "$TMP_DIR"
+
+          # 重命名回原始文件名
+          mv "$NEW_DMG" "$ORIGINAL_DMG"
+
+          echo "DMG 重新打包完成: $ORIGINAL_DMG"
+
+      # 重新上传修改后的 DMG
+      - name: 上传修改后的 DMG
+        if: runner.os == 'macOS' && steps.tauri-build.outputs.artifacts != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg-${{ matrix.platform.rust_target }}
+          path: src-tauri/target/**/*.dmg
+          if-no-files-found: ignore
 
   # ── 所有平台构建完成后，统一更新 Release Notes ─────────────────────────────
   # 独立 job 确保只执行一次，彻底避免多个 matrix job 的竞争条件
