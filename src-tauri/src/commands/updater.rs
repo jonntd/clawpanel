@@ -149,6 +149,7 @@ pub async fn remove_quarantine_flag(app_path: String) -> Result<bool, String> {
     #[cfg(not(target_os = "macos"))]
     {
         // 非 macOS 平台直接返回成功
+        let _ = app_path; // 抑制未使用变量警告
         Ok(false)
     }
 }
@@ -156,8 +157,8 @@ pub async fn remove_quarantine_flag(app_path: String) -> Result<bool, String> {
 /// 使用 sudo 移除 macOS 隔离标记（需要用户授权）
 #[tauri::command]
 pub async fn remove_quarantine_with_sudo(
-    app_path: String,
-    password: String,
+    _app_path: String,
+    _password: String,
 ) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
@@ -169,7 +170,7 @@ pub async fn remove_quarantine_with_sudo(
                 "-c",
                 &format!(
                     "echo '{}' | sudo -S xattr -rd com.apple.quarantine '{}'",
-                    password, app_path
+                    _password, _app_path
                 ),
             ])
             .spawn()
