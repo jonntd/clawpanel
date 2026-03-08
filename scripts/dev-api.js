@@ -978,23 +978,36 @@ const handlers = {
   clawhub_list_installed() {
     const skillsDir = path.join(OPENCLAW_DIR, 'skills')
     if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true })
+
+    // 获取已安装技能列表
+    let slugs = []
     try {
       const out = execSync('npx -y clawhub list', { cwd: homedir(), encoding: 'utf8', timeout: 30000 })
-      const fromCli = out.split('\n')
+      slugs = out.split('\n')
         .map(line => line.trim())
         .filter(line => line && line !== 'No installed skills.')
-        .map(line => ({ slug: line.split(/\s+/)[0], installed: true }))
-      if (fromCli.length) return fromCli
-    } catch {}
-
-    // 兜底：直接扫描 ~/.openclaw/skills 目录，避免 CLI 输出格式变化导致空列表
-    try {
-      return fs.readdirSync(skillsDir, { withFileTypes: true })
-        .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
-        .map(entry => ({ slug: entry.name, installed: true }))
+        .map(line => line.split(/\s+/)[0])
     } catch {
-      return []
+      // 兜底：直接扫描 ~/.openclaw/skills 目录
+      try {
+        slugs = fs.readdirSync(skillsDir, { withFileTypes: true })
+          .filter(entry => entry.isDirectory() || entry.isSymbolicLink())
+          .map(entry => entry.name)
+      } catch {
+        return []
+      }
     }
+
+    // 快速返回基本列表（无描述，最快）
+    return slugs.map(slug => ({
+      slug,
+      displayName: slug,
+      summary: '',
+      description: '',
+      version: 'latest',
+      installed: true,
+      source: 'local'
+    }))
   },
 
   clawhub_inspect({ slug }) {

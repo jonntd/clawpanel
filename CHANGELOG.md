@@ -9,7 +9,6 @@
 
 ### 新功能 (Features)
 
-- **公益 AI 接口计划** — 内置免费 AI 接口（gpt.qt.cool），GPT-5 全系列模型一键接入，Token 费用由项目组承担
 - **Agent 灵魂借尸还魂** — AI 助手可从 OpenClaw Agent 加载完整灵魂（SOUL / IDENTITY / USER / AGENTS / TOOLS），继承人格与记忆
 - **知识库注入** — 自定义 Markdown 知识注入 AI 助手，对话时自动激活
 - **AI 工具权限管控** — 工具调用权限三档可调（完整 / 受限 / 禁用），危险操作二次确认

@@ -367,4 +367,11 @@ export const api = {
   saveImage: (id, data) => invoke('assistant_save_image', { id, data }),
   loadImage: (id) => invoke('assistant_load_image', { id }),
   deleteImage: (id) => invoke('assistant_delete_image', { id }),
+
+  // Skills 管理 (ClawHub)
+  clawhubListInstalled: () => invoke('clawhub_list_installed'),
+  clawhubTrending: () => invoke('clawhub_trending'),
+  clawhubSearch: (query) => invoke('clawhub_search', { query }),
+  clawhubInspect: (slug) => invoke('clawhub_inspect', { slug }),
+  clawhubInstall: (slug) => invoke('clawhub_install', { slug }),
 }
