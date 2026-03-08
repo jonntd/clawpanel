@@ -35,15 +35,19 @@ fn check_and_remove_quarantine() {
             .output();
 
         if let Ok(output) = check_output {
-            let has_quarantine = String::from_utf8_lossy(&output.stdout)
-                .contains("com.apple.quarantine");
+            let has_quarantine =
+                String::from_utf8_lossy(&output.stdout).contains("com.apple.quarantine");
 
             if has_quarantine {
                 println!("[Startup] 检测到隔离标记，尝试自动移除...");
 
                 // 尝试直接移除（某些情况下可以成功）
                 let result = Command::new("xattr")
-                    .args(["-rd", "com.apple.quarantine", app_path.to_str().unwrap_or("")])
+                    .args([
+                        "-rd",
+                        "com.apple.quarantine",
+                        app_path.to_str().unwrap_or(""),
+                    ])
                     .output();
 
                 match result {

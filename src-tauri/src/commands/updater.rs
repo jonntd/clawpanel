@@ -121,8 +121,8 @@ pub async fn remove_quarantine_flag(app_path: String) -> Result<bool, String> {
             .output()
             .map_err(|e| format!("检查隔离标记失败: {e}"))?;
 
-        let has_quarantine = String::from_utf8_lossy(&check_output.stdout)
-            .contains("com.apple.quarantine");
+        let has_quarantine =
+            String::from_utf8_lossy(&check_output.stdout).contains("com.apple.quarantine");
 
         if !has_quarantine {
             return Ok(false); // 没有隔离标记，不需要移除
@@ -155,14 +155,23 @@ pub async fn remove_quarantine_flag(app_path: String) -> Result<bool, String> {
 
 /// 使用 sudo 移除 macOS 隔离标记（需要用户授权）
 #[tauri::command]
-pub async fn remove_quarantine_with_sudo(app_path: String, password: String) -> Result<bool, String> {
+pub async fn remove_quarantine_with_sudo(
+    app_path: String,
+    password: String,
+) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
 
         // 使用 echo 管道输入密码给 sudo
         let mut child = Command::new("sh")
-            .args(["-c", &format!("echo '{}' | sudo -S xattr -rd com.apple.quarantine '{}'", password, app_path)])
+            .args([
+                "-c",
+                &format!(
+                    "echo '{}' | sudo -S xattr -rd com.apple.quarantine '{}'",
+                    password, app_path
+                ),
+            ])
             .spawn()
             .map_err(|e| format!("执行 sudo 命令失败: {e}"))?;
 
