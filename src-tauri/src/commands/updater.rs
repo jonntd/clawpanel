@@ -2,7 +2,6 @@
 /// 支持备份、下载、验证、安装、回滚等功能
 use std::fs;
 use std::path::PathBuf;
-use tauri::Emitter;
 
 /// 创建 ClawPanel 应用备份
 #[tauri::command]
@@ -39,7 +38,7 @@ pub async fn restore_app_backup(backup_path: String) -> Result<String, String> {
     }
 
     // 实际恢复逻辑需要根据具体需求实现
-    fs::write(&path, format!("Restored from backup")).map_err(|e| format!("恢复备份失败: {e}"))?;
+    fs::write(&path, "Restored from backup").map_err(|e| format!("恢复备份失败: {e}"))?;
 
     Ok("恢复成功".to_string())
 }
@@ -102,7 +101,7 @@ pub async fn verify_checksum(file_path: String, expected_checksum: String) -> Re
 
 /// 安装更新包
 #[tauri::command]
-pub async fn install_update(file_path: String) -> Result<String, String> {
+pub async fn install_update(_file_path: String) -> Result<String, String> {
     // 实际安装逻辑需要根据具体需求实现
     // 这里只是示例，实际应该调用相应的安装命令
 

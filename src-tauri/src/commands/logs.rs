@@ -1,7 +1,7 @@
 /// 日志读取命令
 /// 使用 BufReader + Seek 避免 OOM，限制最大读取量
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 
 /// 将字节序列转换为有效的 UTF-8 字符串，替换无效字符
