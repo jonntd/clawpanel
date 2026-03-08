@@ -11,8 +11,7 @@ pub async fn create_backup(name: String) -> Result<String, String> {
         .map(|h| h.join(".openclaw/backups"))
         .map_err(|e| format!("无法获取备份目录: {e}"))?;
 
-    fs::create_dir_all(&backup_dir)
-        .map_err(|e| format!("创建备份目录失败: {e}"))?;
+    fs::create_dir_all(&backup_dir).map_err(|e| format!("创建备份目录失败: {e}"))?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let backup_name = if name.is_empty() {
@@ -40,8 +39,7 @@ pub async fn restore_backup(backup_path: String) -> Result<String, String> {
     }
 
     // 实际恢复逻辑需要根据具体需求实现
-    fs::write(&path, format!("Restored from backup"))
-        .map_err(|e| format!("恢复备份失败: {e}"))?;
+    fs::write(&path, format!("Restored from backup")).map_err(|e| format!("恢复备份失败: {e}"))?;
 
     Ok("恢复成功".to_string())
 }
@@ -59,17 +57,17 @@ pub async fn download_file(url: String, file_path: String) -> Result<String, Str
         return Err(format!("下载失败: HTTP {}", response.status()));
     }
 
-    let bytes = response.bytes().await
+    let bytes = response
+        .bytes()
+        .await
         .map_err(|e| format!("读取响应失败: {e}"))?;
 
     let path = PathBuf::from(&file_path);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("创建目录失败: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {e}"))?;
     }
 
-    let mut file = fs::File::create(&path)
-        .map_err(|e| format!("创建文件失败: {e}"))?;
+    let mut file = fs::File::create(&path).map_err(|e| format!("创建文件失败: {e}"))?;
 
     file.write_all(&bytes)
         .map_err(|e| format!("写入文件失败: {e}"))?;
@@ -80,10 +78,9 @@ pub async fn download_file(url: String, file_path: String) -> Result<String, Str
 /// 计算文件的 SHA-256 校验和
 #[tauri::command]
 pub async fn calculate_checksum(file_path: String) -> Result<String, String> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
 
-    let bytes = fs::read(&file_path)
-        .map_err(|e| format!("读取文件失败: {e}"))?;
+    let bytes = fs::read(&file_path).map_err(|e| format!("读取文件失败: {e}"))?;
 
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
@@ -119,8 +116,7 @@ pub async fn get_temp_dir() -> Result<String, String> {
         .map(|h| h.join(".openclaw/temp"))
         .map_err(|e| format!("无法获取临时目录: {e}"))?;
 
-    fs::create_dir_all(&temp_dir)
-        .map_err(|e| format!("创建临时目录失败: {e}"))?;
+    fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {e}"))?;
 
     Ok(temp_dir.to_string_lossy())
 }
@@ -134,8 +130,7 @@ pub async fn delete_file(file_path: String) -> Result<String, String> {
         return Ok("文件不存在".to_string());
     }
 
-    fs::remove_file(&path)
-        .map_err(|e| format!("删除文件失败: {e}"))?;
+    fs::remove_file(&path).map_err(|e| format!("删除文件失败: {e}"))?;
 
     Ok("删除成功".to_string())
 }
@@ -164,22 +159,19 @@ pub async fn check_panel_update() -> Result<UpdateInfo, String> {
         return Err(format!("GitHub API 请求失败: HTTP {}", response.status()));
     }
 
-    let json: Value = response.json().await
+    let json: Value = response
+        .json()
+        .await
         .map_err(|e| format!("解析 JSON 失败: {e}"))?;
 
-    let tag_name = json.get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let tag_name = json.get("tag_name").and_then(|v| v.as_str()).unwrap_or("");
 
-    let html_url = json.get("html_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let html_url = json.get("html_url").and_then(|v| v.as_str()).unwrap_or("");
 
-    let body = json.get("body")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let body = json.get("body").and_then(|v| v.as_str()).unwrap_or("");
 
-    let published_at = json.get("published_at")
+    let published_at = json
+        .get("published_at")
         .and_then(|v| v.as_str())
         .unwrap_or("");
 

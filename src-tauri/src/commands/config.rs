@@ -469,7 +469,7 @@ fn detect_installed_source() -> String {
 pub async fn get_version_info() -> Result<VersionInfo, String> {
     let current = get_local_version().await;
     let source = detect_installed_source();
-    
+
     // 使用 openclaw update status 命令检查更新状态
     let (latest, update_available) = match get_latest_version_from_cli().await {
         Ok((latest, available)) => (Some(latest), available),
@@ -488,7 +488,7 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
             (latest, available)
         }
     };
-    
+
     Ok(VersionInfo {
         current,
         latest,
@@ -500,41 +500,44 @@ pub async fn get_version_info() -> Result<VersionInfo, String> {
 /// 从 openclaw update status 命令获取最新版本信息
 async fn get_latest_version_from_cli() -> Result<(String, bool), String> {
     use crate::utils::openclaw_command_async;
-    
+
     let output = openclaw_command_async()
         .args(["update", "status"])
         .output()
         .await
         .map_err(|e| format!("执行 openclaw update status 失败: {e}"))?;
-    
+
     if !output.status.success() {
         return Err("命令执行失败".to_string());
     }
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let output_str = format!("{}{}", stdout, stderr);
-    
+
     // 解析输出,检查是否有新版本
     if output_str.contains("有新版本") || output_str.contains("update available") {
         // 提取版本号
         let re = regex::Regex::new(r"(\d+\.\d+\.\d+[\w.-]*)")
             .map_err(|e| format!("创建正则表达式失败: {e}"))?;
-        let versions: Vec<_> = re.find_iter(&output_str).map(|m| m.as_str().to_string()).collect();
-        
+        let versions: Vec<_> = re
+            .find_iter(&output_str)
+            .map(|m| m.as_str().to_string())
+            .collect();
+
         if versions.len() >= 2 {
             // 假设第一个是当前版本,第二个是最新版本
             return Ok((versions[1].clone(), true));
         }
-        
+
         // 如果只有一个版本号,假设它是最新版本
         if !versions.is_empty() {
             return Ok((versions[0].clone(), true));
         }
-        
+
         return Err("无法解析版本号".to_string());
     }
-    
+
     // 没有新版本
     if output_str.contains("已是最新") || output_str.contains("up to date") {
         // 返回当前版本作为最新版本
@@ -542,7 +545,7 @@ async fn get_latest_version_from_cli() -> Result<(String, bool), String> {
             return Ok((current, false));
         }
     }
-    
+
     Err("无法解析更新状态".to_string())
 }
 
@@ -1475,11 +1478,11 @@ pub fn load_fallbacks_history() -> Result<Value, String> {
     if !path.exists() {
         return Ok(serde_json::json!([]));
     }
-    
+
     let content = fs::read_to_string(&path).map_err(|e| format!("读取历史记录失败: {e}"))?;
-    let history: Vec<FallbacksHistoryRecord> = serde_json::from_str(&content)
-        .map_err(|e| format!("解析历史记录失败: {e}"))?;
-    
+    let history: Vec<FallbacksHistoryRecord> =
+        serde_json::from_str(&content).map_err(|e| format!("解析历史记录失败: {e}"))?;
+
     serde_json::to_value(history).map_err(|e| format!("序列化失败: {e}"))
 }
 
@@ -1489,10 +1492,10 @@ pub fn save_fallbacks_history(history: Value) -> Result<(), String> {
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {e}"))?;
     }
-    
+
     let path = dir.join("fallbacks-history.json");
-    let json = serde_json::to_string_pretty(&history)
-        .map_err(|e| format!("序列化历史记录失败: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(&history).map_err(|e| format!("序列化历史记录失败: {e}"))?;
     fs::write(&path, json).map_err(|e| format!("保存历史记录失败: {e}"))
 }
 
@@ -1509,14 +1512,19 @@ pub fn clear_fallbacks_history() -> Result<(), String> {
 #[tauri::command]
 pub async fn set_fallbacks_config(fallbacks: Vec<String>) -> Result<(), String> {
     use crate::utils::openclaw_command_async;
-    
+
     // 将 fallbacks 数组转换为 JSON 字符串
-    let fallbacks_json = serde_json::to_string(&fallbacks)
-        .map_err(|e| format!("序列化 fallbacks 失败: {e}"))?;
-    
+    let fallbacks_json =
+        serde_json::to_string(&fallbacks).map_err(|e| format!("序列化 fallbacks 失败: {e}"))?;
+
     // 使用 openclaw config set 命令安全地设置配置
     let output = openclaw_command_async()
-        .args(["config", "set", "agents.defaults.model.fallbacks", &fallbacks_json])
+        .args([
+            "config",
+            "set",
+            "agents.defaults.model.fallbacks",
+            &fallbacks_json,
+        ])
         .output()
         .await
         .map_err(|e| {
@@ -1526,11 +1534,11 @@ pub async fn set_fallbacks_config(fallbacks: Vec<String>) -> Result<(), String> 
                 format!("执行 openclaw config set 失败: {e}")
             }
         })?;
-    
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("设置 fallbacks 配置失败: {stderr}"));
     }
-    
+
     Ok(())
 }
