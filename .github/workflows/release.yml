@@ -154,24 +154,22 @@ jobs:
           ln -s /Applications "$DMG_CONTENTS/Applications"
 
           # 创建说明文件
-          cat > "$DMG_CONTENTS/说明.txt" << 'EOF'
-ClawPanel 安装说明
-==================
-
-方法1（推荐）: 使用安装脚本
-----------------------------
-双击 "安装ClawPanel.command" 脚本，自动完成安装并移除安全限制
-
-方法2: 手动安装
-----------------
-1. 将 ClawPanel.app 拖到 Applications 文件夹
-2. 打开终端运行: sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app
-3. 从启动台打开 ClawPanel
-
-遇到问题?
----------
-访问 https://github.com/jonntd/clawpanel/issues 获取帮助
-EOF
+          echo "ClawPanel 安装说明" > "$DMG_CONTENTS/说明.txt"
+          echo "==================" >> "$DMG_CONTENTS/说明.txt"
+          echo "" >> "$DMG_CONTENTS/说明.txt"
+          echo "方法1（推荐）: 使用安装脚本" >> "$DMG_CONTENTS/说明.txt"
+          echo "----------------------------" >> "$DMG_CONTENTS/说明.txt"
+          echo "双击 安装ClawPanel.command 脚本，自动完成安装并移除安全限制" >> "$DMG_CONTENTS/说明.txt"
+          echo "" >> "$DMG_CONTENTS/说明.txt"
+          echo "方法2: 手动安装" >> "$DMG_CONTENTS/说明.txt"
+          echo "----------------" >> "$DMG_CONTENTS/说明.txt"
+          echo "1. 将 ClawPanel.app 拖到 Applications 文件夹" >> "$DMG_CONTENTS/说明.txt"
+          echo "2. 打开终端运行: sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app" >> "$DMG_CONTENTS/说明.txt"
+          echo "3. 从启动台打开 ClawPanel" >> "$DMG_CONTENTS/说明.txt"
+          echo "" >> "$DMG_CONTENTS/说明.txt"
+          echo "遇到问题?" >> "$DMG_CONTENTS/说明.txt"
+          echo "---------" >> "$DMG_CONTENTS/说明.txt"
+          echo "访问 https://github.com/jonntd/clawpanel/issues 获取帮助" >> "$DMG_CONTENTS/说明.txt"
 
           # 卸载原始 DMG
           hdiutil detach "$MOUNT_POINT"
