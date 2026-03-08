@@ -1,7 +1,25 @@
 /**
  * 极简 hash 路由
  */
-const routes = {}
+const routes = {
+  '/dashboard': () => import('./pages/dashboard.js'),
+  '/agents': () => import('./pages/agents.js'),
+  '/assistant': () => import('./pages/assistant.js'),
+  '/chat': () => import('./pages/chat.js'),
+  '/chat-debug': () => import('./pages/chat-debug.js'),
+  '/extensions': () => import('./pages/extensions.js'),
+  '/gateway': () => import('./pages/gateway.js'),
+  '/logs': () => import('./pages/logs.js'),
+  '/memory': () => import('./pages/memory.js'),
+  '/models': () => import('./pages/models.js'),
+  '/security': () => import('./pages/security.js'),
+  '/services': () => import('./pages/services.js'),
+  '/setup': () => import('./pages/setup.js'),
+  '/skills': () => import('./pages/skills.js'),
+  '/skillhub': () => import('./pages/skillhub.js'),
+  '/about': () => import('./pages/about.js'),
+  '/update': () => import('./pages/update.js'),
+}
 const _moduleCache = {}
 let _contentEl = null
 let _loadId = 0

@@ -200,7 +200,22 @@ function sortModels(models, sortBy) {
   return sorted
 }
 
-// 渲染服务商列表（渲染完后直接绑定事件）
+// 分帧渲染队列，避免阻塞主线程
+const _renderQueue = []
+let _renderFrameId = null
+
+function scheduleRender(fn) {
+  _renderQueue.push(fn)
+  if (!_renderFrameId) {
+    _renderFrameId = requestAnimationFrame(() => {
+      _renderFrameId = null
+      const queue = _renderQueue.splice(0, _renderQueue.length)
+      queue.forEach(fn => fn())
+    })
+  }
+}
+
+// 渲染服务商列表（支持分帧渲染，优化大量模型时的性能）
 function renderProviders(page, state) {
   const listEl = page.querySelector('#providers-list')
   const providers = state.config?.models?.providers || {}
@@ -217,18 +232,10 @@ function renderProviders(page, state) {
     return
   }
 
+  // 清空列表并创建基础结构
   listEl.innerHTML = keys.map(key => {
     const p = providers[key]
     const models = p.models || []
-    const filtered = search
-      ? models.filter((m) => {
-          const id = (typeof m === 'string' ? m : m.id).toLowerCase()
-          const name = (m.name || '').toLowerCase()
-          return id.includes(search) || name.includes(search)
-        })
-      : models
-    const sorted = sortModels(filtered, sortBy)
-    const hiddenCount = models.length - sorted.length
     return `
       <div class="config-section" data-provider="${key}">
         <div class="config-section-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -259,16 +266,43 @@ function renderProviders(page, state) {
             <button class="btn btn-sm btn-secondary" data-action="apply-sort" style="display:none">保存当前排序</button>
           </div>
         </div>` : ''}
-        <div class="provider-models">
-          ${renderModelCards(key, sorted, primary, search)}
-          ${hiddenCount > 0 ? `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:4px 0">已隐藏 ${hiddenCount} 个不匹配的模型</div>` : ''}
+        <div class="provider-models" data-provider-models="${key}">
+          <div class="models-loading" style="color:var(--text-tertiary);padding:12px;text-align:center">加载中...</div>
         </div>
       </div>
     `
   }).join('')
 
-  // innerHTML 完成后，直接给每个按钮绑定 onclick
+  // 绑定按钮事件（不依赖模型列表）
   bindProviderButtons(listEl, page, state)
+
+  // 分帧渲染模型卡片，避免阻塞 UI
+  keys.forEach((key, index) => {
+    scheduleRender(() => {
+      const p = providers[key]
+      const models = p.models || []
+      const filtered = search
+        ? models.filter((m) => {
+            const id = (typeof m === 'string' ? m : m.id).toLowerCase()
+            const name = (m.name || '').toLowerCase()
+            return id.includes(search) || name.includes(search)
+          })
+        : models
+      const sorted = sortModels(filtered, sortBy)
+      const hiddenCount = models.length - sorted.length
+
+      const container = listEl.querySelector(`[data-provider-models="${key}"]`)
+      if (container) {
+        container.innerHTML = renderModelCards(key, sorted, primary, search) +
+          (hiddenCount > 0 ? `<div style="font-size:var(--font-size-xs);color:var(--text-tertiary);padding:4px 0">已隐藏 ${hiddenCount} 个不匹配的模型</div>` : '')
+      }
+
+      // 最后一个服务商渲染完成后，重新绑定模型卡片相关事件
+      if (index === keys.length - 1) {
+        bindProviderButtons(listEl, page, state)
+      }
+    })
+  })
 }
 
 // 渲染模型卡片（支持搜索高亮和批量选择 checkbox）

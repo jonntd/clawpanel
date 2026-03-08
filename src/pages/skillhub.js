@@ -15,6 +15,21 @@ let skillsCache = null
 let categoriesCache = null
 let featuredCache = null
 
+// 分帧渲染队列，避免阻塞主线程
+const _renderQueue = []
+let _renderFrameId = null
+
+function scheduleRender(fn) {
+  _renderQueue.push(fn)
+  if (!_renderFrameId) {
+    _renderFrameId = requestAnimationFrame(() => {
+      _renderFrameId = null
+      const queue = _renderQueue.splice(0, _renderQueue.length)
+      queue.forEach(fn => fn())
+    })
+  }
+}
+
 // 分类配置 - 使用更简洁的图标
 const CATEGORIES = [
   { id: 'all', name: '全部', icon: '🔥', color: '#FF6B6B', bgColor: '#FFF5F5' },
@@ -490,39 +505,54 @@ export async function render() {
     const end = start + pageSize
     const pageSkills = skills.slice(start, end)
 
-    // 使用 DocumentFragment 批量添加卡片，避免布局抖动
-    const fragment = document.createDocumentFragment()
-    const tempDiv = document.createElement('div')
-    tempDiv.innerHTML = pageSkills.map(renderSkillCard).join('')
-
-    // 将临时 div 中的卡片转移到 fragment
-    while (tempDiv.firstChild) {
-      fragment.appendChild(tempDiv.firstChild)
-    }
+    // 分帧渲染：将卡片分批处理，每帧渲染 6 个，避免阻塞 UI
+    const BATCH_SIZE = 6
+    const totalBatches = Math.ceil(pageSkills.length / BATCH_SIZE)
 
     // 移除旧的空状态（如果存在）
     const emptyEl = grid.querySelector('.skillhub-empty')
     if (emptyEl) emptyEl.remove()
 
-    grid.appendChild(fragment)
+    // 分批渲染卡片
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      scheduleRender(() => {
+        const batchStart = batchIndex * BATCH_SIZE
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, pageSkills.length)
+        const batchSkills = pageSkills.slice(batchStart, batchEnd)
 
-    // 为新添加的卡片绑定事件
-    const newCards = grid.querySelectorAll('.skillhub-card:not([data-bound])')
-    newCards.forEach(card => {
-      card.dataset.bound = 'true'
-      card.addEventListener('click', () => {
-        const skillId = card.dataset.skillId
-        const skill = allSkills.find(s => s.id === skillId)
-        if (skill) showSkillDetail(skill, allSkills)
+        // 使用 DocumentFragment 批量添加卡片
+        const fragment = document.createDocumentFragment()
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = batchSkills.map(renderSkillCard).join('')
+
+        while (tempDiv.firstChild) {
+          fragment.appendChild(tempDiv.firstChild)
+        }
+
+        grid.appendChild(fragment)
+
+        // 为新添加的卡片绑定事件
+        const newCards = grid.querySelectorAll('.skillhub-card:not([data-bound])')
+        newCards.forEach(card => {
+          card.dataset.bound = 'true'
+          card.addEventListener('click', () => {
+            const skillId = card.dataset.skillId
+            const skill = allSkills.find(s => s.id === skillId)
+            if (skill) showSkillDetail(skill, allSkills)
+          })
+        })
       })
-    })
-
-    const pagination = page.querySelector('#pagination')
-    if (skills.length > end) {
-      pagination.style.display = 'flex'
-    } else {
-      pagination.style.display = 'none'
     }
+
+    // 更新分页按钮状态
+    scheduleRender(() => {
+      const pagination = page.querySelector('#pagination')
+      if (skills.length > end) {
+        pagination.style.display = 'flex'
+      } else {
+        pagination.style.display = 'none'
+      }
+    })
   }
   
   function filterAndSort() {
@@ -564,6 +594,8 @@ export async function render() {
     }
     
     filteredSkills = filtered
+    // 搜索/排序/分类切换时需要重置，从第一页开始
+    currentPage = 1
     renderSkills(filtered, true)
   }
   

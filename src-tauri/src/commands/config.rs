@@ -469,22 +469,81 @@ fn detect_installed_source() -> String {
 pub async fn get_version_info() -> Result<VersionInfo, String> {
     let current = get_local_version().await;
     let source = detect_installed_source();
-    let latest = get_latest_version_for(&source).await;
-    let parse_ver = |v: &str| -> Vec<u32> {
-        v.split(|c: char| !c.is_ascii_digit())
-            .filter_map(|s| s.parse().ok())
-            .collect()
+    
+    // 使用 openclaw update status 命令检查更新状态
+    let (latest, update_available) = match get_latest_version_from_cli().await {
+        Ok((latest, available)) => (Some(latest), available),
+        Err(_) => {
+            // CLI 命令失败时,回退到 npm registry 检查
+            let latest = get_latest_version_for(&source).await;
+            let parse_ver = |v: &str| -> Vec<u32> {
+                v.split(|c: char| !c.is_ascii_digit())
+                    .filter_map(|s| s.parse().ok())
+                    .collect()
+            };
+            let available = match (&current, &latest) {
+                (Some(c), Some(l)) => parse_ver(l) > parse_ver(c),
+                _ => false,
+            };
+            (latest, available)
+        }
     };
-    let update_available = match (&current, &latest) {
-        (Some(c), Some(l)) => parse_ver(l) > parse_ver(c),
-        _ => false,
-    };
+    
     Ok(VersionInfo {
         current,
         latest,
         update_available,
         source,
     })
+}
+
+/// 从 openclaw update status 命令获取最新版本信息
+async fn get_latest_version_from_cli() -> Result<(String, bool), String> {
+    use crate::utils::openclaw_command_async;
+    
+    let output = openclaw_command_async()
+        .args(["update", "status"])
+        .output()
+        .await
+        .map_err(|e| format!("执行 openclaw update status 失败: {e}"))?;
+    
+    if !output.status.success() {
+        return Err("命令执行失败".to_string());
+    }
+    
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let output_str = format!("{}{}", stdout, stderr);
+    
+    // 解析输出,检查是否有新版本
+    if output_str.contains("有新版本") || output_str.contains("update available") {
+        // 提取版本号
+        let re = regex::Regex::new(r"(\d+\.\d+\.\d+[\w.-]*)")
+            .map_err(|e| format!("创建正则表达式失败: {e}"))?;
+        let versions: Vec<_> = re.find_iter(&output_str).map(|m| m.as_str().to_string()).collect();
+        
+        if versions.len() >= 2 {
+            // 假设第一个是当前版本,第二个是最新版本
+            return Ok((versions[1].clone(), true));
+        }
+        
+        // 如果只有一个版本号,假设它是最新版本
+        if !versions.is_empty() {
+            return Ok((versions[0].clone(), true));
+        }
+        
+        return Err("无法解析版本号".to_string());
+    }
+    
+    // 没有新版本
+    if output_str.contains("已是最新") || output_str.contains("up to date") {
+        // 返回当前版本作为最新版本
+        if let Some(current) = get_local_version().await {
+            return Ok((current, false));
+        }
+    }
+    
+    Err("无法解析更新状态".to_string())
 }
 
 /// npm 包名映射
@@ -1327,7 +1386,7 @@ pub async fn check_panel_update() -> Result<Value, String> {
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
 
-    let url = "https://api.github.com/repos/qingchencloud/clawpanel/releases/latest";
+    let url = "https://api.github.com/repos/jonntd/clawpanel/releases/latest";
     let resp = client
         .get(url)
         .send()

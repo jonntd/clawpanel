@@ -633,7 +633,26 @@ const handlers = {
     if (!current) {
       try { current = execSync('openclaw --version 2>&1', { windowsHide: true }).toString().trim().split(/\s+/).pop() } catch {}
     }
-    return { current, latest: null, update_available: false, source: 'chinese' }
+    
+    // 检查更新状态
+    let latest = null
+    let updateAvailable = false
+    try {
+      const updateStatus = execSync('openclaw update status 2>&1', { windowsHide: true, timeout: 10000 }).toString()
+      if (updateStatus.includes('有新版本') || updateStatus.includes('update available')) {
+        updateAvailable = true
+        const match = updateStatus.match(/(\d+\.\d+\.\d+[\w.-]*)/g)
+        if (match && match.length >= 2) {
+          latest = match[0]
+        }
+      } else if (updateStatus.includes('已是最新') || updateStatus.includes('up to date')) {
+        updateAvailable = false
+      }
+    } catch (e) {
+      // 命令执行失败,保持默认值
+    }
+    
+    return { current, latest, update_available: updateAvailable, source: 'chinese' }
   },
 
   // 清理 base URL：去掉尾部斜杠和已知端点路径，防止路径重复

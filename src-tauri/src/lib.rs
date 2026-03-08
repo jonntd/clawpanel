@@ -3,7 +3,7 @@ mod models;
 mod tray;
 mod utils;
 
-use commands::{agent, assistant, config, device, extensions, logs, memory, pairing, service};
+use commands::{agent, assistant, config, device, extensions, logs, memory, pairing, service, updater};
 
 pub fn run() {
     tauri::Builder::default()
@@ -41,6 +41,16 @@ pub fn run() {
             config::check_panel_update,
             config::read_panel_config,
             config::write_panel_config,
+            // 自动更新系统
+            updater::create_backup,
+            updater::restore_backup,
+            updater::download_file,
+            updater::calculate_checksum,
+            updater::verify_checksum,
+            updater::install_update,
+            updater::get_temp_dir,
+            updater::delete_file,
+            updater::check_panel_update,
             config::get_npm_registry,
             config::set_npm_registry,
             config::get_fallbacks_history_path,

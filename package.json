@@ -4,15 +4,15 @@
   "private": true,
   "description": "ClawPanel - OpenClaw 可视化管理面板，基于 Tauri v2 的跨平台桌面应用",
   "type": "module",
-  "author": "qingchencloud",
+  "author": "jonntd",
   "license": "MIT",
-  "homepage": "https://github.com/qingchencloud/clawpanel",
+  "homepage": "https://github.com/jonntd/clawpanel",
   "repository": {
     "type": "git",
-    "url": "https://github.com/qingchencloud/clawpanel.git"
+    "url": "https://github.com/jonntd/clawpanel.git"
   },
   "bugs": {
-    "url": "https://github.com/qingchencloud/clawpanel/issues"
+    "url": "https://github.com/jonntd/clawpanel/issues"
   },
   "keywords": [
     "openclaw",

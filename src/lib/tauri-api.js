@@ -220,7 +220,7 @@ function mockInvoke(cmd, args) {
     test_model: ({ modelId }) => `模型 ${modelId} 连通正常 (mock)`,
     list_remote_models: () => ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o3-mini', 'dall-e-3', 'text-embedding-3-small'],
     patch_model_vision: () => false,
-    check_panel_update: () => ({ latest: '0.2.0', url: 'https://github.com/qingchencloud/clawpanel/releases' }),
+    check_panel_update: () => invoke('check_panel_update'),
     write_env_file: () => true,
     list_backups: () => [
       { name: 'openclaw-20260226-143000.json', size: 8542, created_at: 1740577800 },
@@ -317,6 +317,17 @@ export const api = {
   // 面板配置 (clawpanel.json)
   readPanelConfig: () => invoke('read_panel_config'),
   writePanelConfig: (config) => invoke('write_panel_config', { config }),
+  
+  // 自动更新系统
+  createBackup: (name) => invoke('create_backup', { name }),
+  restoreBackup: (backupPath) => invoke('restore_backup', { backupPath }),
+  downloadFile: (url, filePath) => invoke('download_file', { url, filePath }),
+  calculateChecksum: (filePath) => invoke('calculate_checksum', { filePath }),
+  verifyChecksum: (filePath, expectedChecksum) => invoke('verify_checksum', { filePath, expectedChecksum }),
+  installUpdate: (filePath) => invoke('install_update', { filePath }),
+  getTempDir: () => invoke('get_temp_dir'),
+  deleteFile: (filePath) => invoke('delete_file', { filePath }),
+  checkPanelUpdate: () => invoke('check_panel_update'),
 
   // 安装/部署
   checkInstallation: () => cachedInvoke('check_installation', {}, 60000),
