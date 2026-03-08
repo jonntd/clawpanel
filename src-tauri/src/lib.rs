@@ -7,7 +7,68 @@ use commands::{
     agent, assistant, config, device, extensions, logs, memory, pairing, service, updater,
 };
 
+/// 检查并尝试移除 macOS 隔离标记
+#[cfg(target_os = "macos")]
+fn check_and_remove_quarantine() {
+    use std::process::Command;
+
+    // 获取应用路径
+    let app_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .and_then(|p| {
+            // 从 ClawPanel.app/Contents/MacOS/clawpanel 向上找到 ClawPanel.app
+            let mut path = p;
+            for _ in 0..3 {
+                if path.extension().map(|e| e == "app").unwrap_or(false) {
+                    return Some(path);
+                }
+                path = path.parent()?.to_path_buf();
+            }
+            None
+        });
+
+    if let Some(app_path) = app_path {
+        // 检查是否有隔离标记
+        let check_output = Command::new("xattr")
+            .args(["-l", app_path.to_str().unwrap_or("")])
+            .output();
+
+        if let Ok(output) = check_output {
+            let has_quarantine = String::from_utf8_lossy(&output.stdout)
+                .contains("com.apple.quarantine");
+
+            if has_quarantine {
+                println!("[Startup] 检测到隔离标记，尝试自动移除...");
+
+                // 尝试直接移除（某些情况下可以成功）
+                let result = Command::new("xattr")
+                    .args(["-rd", "com.apple.quarantine", app_path.to_str().unwrap_or("")])
+                    .output();
+
+                match result {
+                    Ok(output) if output.status.success() => {
+                        println!("[Startup] 隔离标记已自动移除");
+                    }
+                    _ => {
+                        println!("[Startup] 需要管理员权限才能移除隔离标记");
+                        // 这里可以设置一个标志，让前端提示用户
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn check_and_remove_quarantine() {
+    // 非 macOS 平台无需处理
+}
+
 pub fn run() {
+    // 启动时检查隔离标记
+    check_and_remove_quarantine();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
