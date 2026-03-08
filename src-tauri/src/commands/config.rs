@@ -1380,49 +1380,6 @@ pub fn patch_model_vision() -> Result<bool, String> {
     Ok(changed)
 }
 
-/// 检查 ClawPanel 自身是否有新版本（通过 GitHub releases API）
-#[tauri::command]
-pub async fn check_panel_update() -> Result<Value, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .user_agent("ClawPanel")
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {e}"))?;
-
-    let url = "https://api.github.com/repos/jonntd/clawpanel/releases/latest";
-    let resp = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {e}"))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("GitHub API 返回 {}", resp.status()));
-    }
-
-    let json: Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {e}"))?;
-
-    let tag = json
-        .get("tag_name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim_start_matches('v')
-        .to_string();
-
-    let mut result = serde_json::Map::new();
-    result.insert("latest".into(), Value::String(tag));
-    result.insert(
-        "url".into(),
-        json.get("html_url").cloned().unwrap_or(Value::String(
-            "https://github.com/qingchencloud/clawpanel/releases".into(),
-        )),
-    );
-    Ok(Value::Object(result))
-}
-
 // === 面板配置 (clawpanel.json) ===
 
 #[tauri::command]

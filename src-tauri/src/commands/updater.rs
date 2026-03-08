@@ -4,12 +4,12 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Emitter;
 
-/// 创建备份
+/// 创建 ClawPanel 应用备份
 #[tauri::command]
-pub async fn create_backup(name: String) -> Result<String, String> {
+pub async fn create_app_backup(name: String) -> Result<String, String> {
     let backup_dir = dirs::home_dir()
-        .map(|h| h.join(".openclaw/backups"))
-        .map_err(|e| format!("无法获取备份目录: {e}"))?;
+        .ok_or("无法获取主目录")?
+        .join(".openclaw/backups");
 
     fs::create_dir_all(&backup_dir).map_err(|e| format!("创建备份目录失败: {e}"))?;
 
@@ -26,12 +26,12 @@ pub async fn create_backup(name: String) -> Result<String, String> {
     fs::write(&backup_path, format!("Backup created at {}", timestamp))
         .map_err(|e| format!("创建备份失败: {e}"))?;
 
-    Ok(backup_path.to_string_lossy())
+    Ok(backup_path.to_string_lossy().to_string())
 }
 
-/// 恢复备份
+/// 恢复 ClawPanel 应用备份
 #[tauri::command]
-pub async fn restore_backup(backup_path: String) -> Result<String, String> {
+pub async fn restore_app_backup(backup_path: String) -> Result<String, String> {
     let path = PathBuf::from(&backup_path);
 
     if !path.exists() {
@@ -113,12 +113,12 @@ pub async fn install_update(file_path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn get_temp_dir() -> Result<String, String> {
     let temp_dir = dirs::home_dir()
-        .map(|h| h.join(".openclaw/temp"))
-        .map_err(|e| format!("无法获取临时目录: {e}"))?;
+        .ok_or("无法获取主目录")?
+        .join(".openclaw/temp");
 
     fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {e}"))?;
 
-    Ok(temp_dir.to_string_lossy())
+    Ok(temp_dir.to_string_lossy().to_string())
 }
 
 /// 删除文件
@@ -148,7 +148,9 @@ pub async fn check_panel_update() -> Result<UpdateInfo, String> {
         "jonntd", "clawpanel"
     );
 
-    let response = reqwest::get(&url)
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
         .header("Accept", "application/vnd.github.v3+json")
         .header("User-Agent", "ClawPanel-Updater")
         .send()
