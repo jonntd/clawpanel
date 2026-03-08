@@ -1,9 +1,8 @@
+/// 自动更新系统命令
+/// 支持备份、下载、验证、安装、回滚等功能
 use std::fs;
 use std::path::PathBuf;
 use tauri::Emitter;
-
-/// 自动更新系统命令
-/// 支持备份、下载、验证、安装、回滚等功能
 
 /// 创建备份
 #[tauri::command]

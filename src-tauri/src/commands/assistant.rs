@@ -1,7 +1,7 @@
-use base64::{engine::general_purpose, Engine as _};
 /// AI 助手工具命令
 /// 提供终端执行、文件读写、目录列表等能力
 /// 仅在用户主动开启工具后由 AI 调用
+use base64::{engine::general_purpose, Engine as _};
 use std::path::PathBuf;
 
 /// 审计日志：记录 AI 助手的敏感操作（exec / read / write）
