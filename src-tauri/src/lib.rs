@@ -3,7 +3,9 @@ mod models;
 mod tray;
 mod utils;
 
-use commands::{agent, assistant, config, device, extensions, logs, memory, pairing, service, updater};
+use commands::{
+    agent, assistant, config, device, extensions, logs, memory, pairing, service, updater,
+};
 
 pub fn run() {
     tauri::Builder::default()
