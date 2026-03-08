@@ -220,8 +220,8 @@ async function installMacOSUpdate(dmgPath, options = {}) {
       updateState.progress = 50
       notifyUpdateState()
 
-      // 执行安装脚本
-      const installResult = await api.executeCommand('bash', [installerScript])
+      // 执行安装脚本（静默模式）
+      const installResult = await api.executeCommand('bash', [installerScript, 'silent'])
       if (installResult.code !== 0) {
         throw new Error('安装脚本执行失败: ' + installResult.stderr)
       }

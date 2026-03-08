@@ -1,11 +1,21 @@
 #!/bin/bash
 # ClawPanel macOS 安装脚本
 # 自动安装应用并移除隔离标记
+# 用法: ./install-mac.command [silent]
+#   silent - 静默模式，不启动应用，不等待用户输入
 
-echo "========================================"
-echo "  ClawPanel 安装程序"
-echo "========================================"
-echo ""
+# 检查是否为静默模式
+SILENT_MODE=false
+if [ "$1" = "silent" ]; then
+    SILENT_MODE=true
+fi
+
+if [ "$SILENT_MODE" = false ]; then
+    echo "========================================"
+    echo "  ClawPanel 安装程序"
+    echo "========================================"
+    echo ""
+fi
 
 # 获取脚本所在目录（DMG 挂载目录）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -58,42 +68,50 @@ xattr -rd com.apple.quarantine "$INSTALL_PATH" 2>/dev/null
 if [ $? -eq 0 ]; then
     echo "   ✅ 隔离标记已移除"
 else
-    echo "   ⚠️  需要管理员权限移除隔离标记"
-    echo "   正在尝试使用 sudo..."
-    echo ""
+    if [ "$SILENT_MODE" = false ]; then
+        echo "   ⚠️  需要管理员权限移除隔离标记"
+        echo "   正在尝试使用 sudo..."
+        echo ""
+    fi
     sudo xattr -rd com.apple.quarantine "$INSTALL_PATH"
     if [ $? -eq 0 ]; then
-        echo "   ✅ 隔离标记已移除"
+        if [ "$SILENT_MODE" = false ]; then
+            echo "   ✅ 隔离标记已移除"
+        fi
     else
-        echo "   ❌ 无法移除隔离标记"
-        echo ""
-        echo "   请手动运行以下命令:"
-        echo "   sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app"
+        if [ "$SILENT_MODE" = false ]; then
+            echo "   ❌ 无法移除隔离标记"
+            echo ""
+            echo "   请手动运行以下命令:"
+            echo "   sudo xattr -rd com.apple.quarantine /Applications/ClawPanel.app"
+        fi
     fi
 fi
-echo ""
 
-# 3. 验证安装
-echo "3️⃣  验证安装..."
-if [ -d "$INSTALL_PATH" ]; then
-    echo "   ✅ 应用已安装到 /Applications"
-else
-    echo "   ❌ 安装验证失败"
-    read -p "按回车键退出..."
-    exit 1
+if [ "$SILENT_MODE" = false ]; then
+    echo ""
+    # 3. 验证安装
+    echo "3️⃣  验证安装..."
+    if [ -d "$INSTALL_PATH" ]; then
+        echo "   ✅ 应用已安装到 /Applications"
+    else
+        echo "   ❌ 安装验证失败"
+        read -p "按回车键退出..."
+        exit 1
+    fi
+    echo ""
+
+    echo "========================================"
+    echo "  ✅ 安装完成！"
+    echo "========================================"
+    echo ""
+    echo "🚀 正在启动 ClawPanel..."
+    open "$INSTALL_PATH"
+    echo ""
+    echo "📖 使用说明:"
+    echo "   - 应用已安装到 /Applications"
+    echo "   - 可以在启动台或应用程序文件夹中找到"
+    echo "   - 首次使用请参考文档: https://github.com/jonntd/clawpanel"
+    echo ""
+    read -p "按回车键关闭此窗口..."
 fi
-echo ""
-
-echo "========================================"
-echo "  ✅ 安装完成！"
-echo "========================================"
-echo ""
-echo "🚀 正在启动 ClawPanel..."
-open "$INSTALL_PATH"
-echo ""
-echo "📖 使用说明:"
-echo "   - 应用已安装到 /Applications"
-echo "   - 可以在启动台或应用程序文件夹中找到"
-echo "   - 首次使用请参考文档: https://github.com/jonntd/clawpanel"
-echo ""
-read -p "按回车键关闭此窗口..."
