@@ -112,6 +112,8 @@ pub fn run() {
             updater::install_update,
             updater::remove_quarantine_flag,
             updater::remove_quarantine_with_sudo,
+            updater::execute_command,
+            updater::file_exists,
             updater::get_temp_dir,
             updater::delete_file,
             updater::check_panel_update,

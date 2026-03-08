@@ -175,6 +175,127 @@ async function installUpdate(filePath) {
   }
 }
 
+// macOS 专用：安装 DMG 更新并移除隔离标记
+async function installMacOSUpdate(dmgPath, options = {}) {
+  const { autoLaunch = true } = options
+
+  try {
+    updateState.status = UpdateStatus.INSTALLING
+    updateState.progress = 0
+    notifyUpdateState()
+
+    console.log('[Update] 开始安装 macOS 更新:', dmgPath)
+
+    // 1. 挂载 DMG
+    updateState.progress = 10
+    notifyUpdateState()
+
+    const mountResult = await api.executeCommand('hdiutil', ['attach', dmgPath, '-nobrowse'])
+    if (mountResult.code !== 0) {
+      throw new Error('挂载 DMG 失败: ' + mountResult.stderr)
+    }
+
+    // 解析挂载点
+    const mountPoint = mountResult.stdout.match(/\/Volumes\/[^\n]+/)?.[0]
+    if (!mountPoint) {
+      throw new Error('无法获取 DMG 挂载点')
+    }
+
+    console.log('[Update] DMG 挂载点:', mountPoint)
+    updateState.progress = 30
+    notifyUpdateState()
+
+    // 2. 查找应用
+    const appName = 'ClawPanel.app'
+    const appPath = `${mountPoint}/${appName}`
+    const installPath = `/Applications/${appName}`
+
+    // 检查是否存在安装脚本
+    const installerScript = `${mountPoint}/安装ClawPanel.command`
+    const hasInstaller = await api.fileExists(installerScript)
+
+    if (hasInstaller) {
+      // 使用安装脚本
+      console.log('[Update] 使用安装脚本')
+      updateState.progress = 50
+      notifyUpdateState()
+
+      // 执行安装脚本
+      const installResult = await api.executeCommand('bash', [installerScript])
+      if (installResult.code !== 0) {
+        throw new Error('安装脚本执行失败: ' + installResult.stderr)
+      }
+    } else {
+      // 手动安装流程
+      console.log('[Update] 使用手动安装流程')
+
+      // 3. 关闭当前应用
+      updateState.progress = 40
+      notifyUpdateState()
+      console.log('[Update] 准备关闭当前应用...')
+
+      // 4. 备份当前版本
+      updateState.progress = 50
+      notifyUpdateState()
+      const backupPath = `/Applications/${appName}.backup.${Date.now()}`
+      await api.executeCommand('mv', [installPath, backupPath])
+
+      // 5. 复制新版本
+      updateState.progress = 70
+      notifyUpdateState()
+      const copyResult = await api.executeCommand('cp', ['-R', appPath, installPath])
+      if (copyResult.code !== 0) {
+        // 复制失败，回滚
+        await api.executeCommand('mv', [backupPath, installPath])
+        throw new Error('复制新版本失败')
+      }
+
+      // 6. 移除隔离标记
+      updateState.progress = 85
+      notifyUpdateState()
+      console.log('[Update] 移除隔离标记...')
+
+      const quarantineResult = await api.removeQuarantineFlag(installPath)
+      if (!quarantineResult) {
+        // 需要 sudo，尝试使用密码（如果提供了）
+        if (options.sudoPassword) {
+          await api.removeQuarantineWithSudo(installPath, options.sudoPassword)
+        } else {
+          console.warn('[Update] 需要管理员权限移除隔离标记')
+          // 继续，让用户手动处理
+        }
+      }
+
+      // 7. 删除备份
+      updateState.progress = 95
+      notifyUpdateState()
+      await api.executeCommand('rm', ['-rf', backupPath])
+    }
+
+    // 8. 卸载 DMG
+    await api.executeCommand('hdiutil', ['detach', mountPoint])
+
+    // 9. 删除下载的 DMG
+    await api.deleteFile(dmgPath)
+
+    updateState.progress = 100
+    notifyUpdateState()
+
+    console.log('[Update] macOS 更新安装完成')
+
+    // 10. 自动启动新版本
+    if (autoLaunch) {
+      console.log('[Update] 启动新版本...')
+      await api.executeCommand('open', [installPath])
+    }
+
+    return true
+  } catch (e) {
+    console.error('[Update] macOS 安装失败:', e)
+    throw new Error(`安装失败: ${e.message}`)
+  }
+}
+
 // 回滚到备份版本
 async function rollbackToBackup(backupPath) {
   try {
@@ -340,7 +461,17 @@ async function performUpdate(options = {}) {
 
     // 5. 安装更新
     if (autoInstall) {
-      await installUpdate(filePath)
+      // 检测平台并使用对应的安装方式
+      const platform = navigator.platform.toLowerCase()
+      const isMac = platform.includes('mac')
+
+      if (isMac && filePath.endsWith('.dmg')) {
+        // macOS: 使用 DMG 安装流程
+        await installMacOSUpdate(filePath, { autoLaunch: true, sudoPassword: options.sudoPassword })
+      } else {
+        // 其他平台: 使用通用安装流程
+        await installUpdate(filePath)
+      }
     } else {
       updateState.status = UpdateStatus.SUCCESS
       updateState.progress = 100

@@ -207,6 +207,38 @@ pub async fn delete_file(file_path: String) -> Result<String, String> {
     Ok("删除成功".to_string())
 }
 
+/// 执行系统命令
+#[tauri::command]
+pub async fn execute_command(command: String, args: Vec<String>) -> Result<CommandResult, String> {
+    use std::process::Command;
+
+    let output = Command::new(&command)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("执行命令失败: {e}"))?;
+
+    Ok(CommandResult {
+        code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
+
+/// 检查文件是否存在
+#[tauri::command]
+pub async fn file_exists(file_path: String) -> Result<bool, String> {
+    let path = PathBuf::from(&file_path);
+    Ok(path.exists())
+}
+
+/// 命令执行结果
+#[derive(serde::Serialize)]
+pub struct CommandResult {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
 /// 检查面板更新（GitHub API）
 #[tauri::command]
 pub async fn check_panel_update() -> Result<UpdateInfo, String> {
