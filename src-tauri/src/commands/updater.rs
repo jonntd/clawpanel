@@ -108,6 +108,79 @@ pub async fn install_update(_file_path: String) -> Result<String, String> {
     Ok("安装成功".to_string())
 }
 
+/// 移除 macOS 隔离标记（quarantine flag）
+#[tauri::command]
+pub async fn remove_quarantine_flag(app_path: String) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        // 检查是否有隔离标记
+        let check_output = Command::new("xattr")
+            .args(["-l", &app_path])
+            .output()
+            .map_err(|e| format!("检查隔离标记失败: {e}"))?;
+
+        let has_quarantine = String::from_utf8_lossy(&check_output.stdout)
+            .contains("com.apple.quarantine");
+
+        if !has_quarantine {
+            return Ok(false); // 没有隔离标记，不需要移除
+        }
+
+        // 尝试移除隔离标记
+        let result = Command::new("xattr")
+            .args(["-rd", "com.apple.quarantine", &app_path])
+            .output()
+            .map_err(|e| format!("移除隔离标记失败: {e}"))?;
+
+        if result.status.success() {
+            Ok(true)
+        } else {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            if stderr.contains("Permission denied") {
+                Err("需要管理员权限才能移除隔离标记".to_string())
+            } else {
+                Err(format!("移除隔离标记失败: {}", stderr))
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // 非 macOS 平台直接返回成功
+        Ok(false)
+    }
+}
+
+/// 使用 sudo 移除 macOS 隔离标记（需要用户授权）
+#[tauri::command]
+pub async fn remove_quarantine_with_sudo(app_path: String, password: String) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+
+        // 使用 echo 管道输入密码给 sudo
+        let mut child = Command::new("sh")
+            .args(["-c", &format!("echo '{}' | sudo -S xattr -rd com.apple.quarantine '{}'", password, app_path)])
+            .spawn()
+            .map_err(|e| format!("执行 sudo 命令失败: {e}"))?;
+
+        let result = child.wait().map_err(|e| format!("等待命令完成失败: {e}"))?;
+
+        if result.success() {
+            Ok(true)
+        } else {
+            Err("密码错误或权限不足".to_string())
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(false)
+    }
+}
+
 /// 获取临时目录
 #[tauri::command]
 pub async fn get_temp_dir() -> Result<String, String> {

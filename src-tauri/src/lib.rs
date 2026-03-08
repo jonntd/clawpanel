@@ -49,6 +49,8 @@ pub fn run() {
             updater::calculate_checksum,
             updater::verify_checksum,
             updater::install_update,
+            updater::remove_quarantine_flag,
+            updater::remove_quarantine_with_sudo,
             updater::get_temp_dir,
             updater::delete_file,
             updater::check_panel_update,
